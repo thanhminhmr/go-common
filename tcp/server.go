@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math/rand/v2"
 	"net"
-	"net/netip"
 	"sync"
 	"sync/atomic"
 
@@ -14,8 +13,7 @@ import (
 )
 
 type ServerConfig struct {
-	Address     netip.AddrPort `env:"TCP_SERVER_ADDRESS" validate:"required"`
-	Concurrency uint16         `env:"TCP_SERVER_CONCURRENCY" validate:"min=1,max=256"`
+	Port uint16 `env:"TCP_SERVER_PORT" validate:"required"`
 }
 
 type ServerHandler interface {
@@ -37,12 +35,13 @@ func NewServer(
 ) {
 	serverCtx, cancel := context.WithCancel(context.Background())
 	server := tcpServer{
-		logger:   logger,
-		shutdown: shutdown,
-		config:   config,
-		handler:  handler,
-		ctx:      serverCtx,
-		cancel:   cancel,
+		logger:    logger,
+		shutdown:  shutdown,
+		config:    config,
+		handler:   handler,
+		ctx:       serverCtx,
+		cancel:    cancel,
+		semaphore: make(chan struct{}, 1024),
 	}
 	lifecycle.Append(fx.Hook{
 		OnStart: server.onStart,
@@ -57,24 +56,22 @@ type tcpServer struct {
 	handler   ServerHandler
 	ctx       context.Context
 	cancel    context.CancelFunc
+	semaphore chan struct{}
 	listener  atomic.Pointer[net.TCPListener]
 	waitGroup sync.WaitGroup
 }
 
 func (s *tcpServer) onStart(_ context.Context) error {
 	// create listener
-	listener, err := net.ListenTCP("tcp", net.TCPAddrFromAddrPort(s.config.Address))
+	listener, err := net.ListenTCP("tcp", &net.TCPAddr{Port: int(s.config.Port)})
 	if err != nil {
-		s.logger.Error().Err(err).Stringer("addr", s.config.Address).Msg("Failed to listen")
+		s.logger.Error().Err(err).Uint16("port", s.config.Port).Msg("Failed to listen")
 		return err
 	}
 	s.listener.Store(listener)
 	// start workers
-	s.waitGroup.Add(int(s.config.Concurrency))
-	s.logger.Info().Stringer("addr", s.config.Address).Msg("Start listening")
-	for range s.config.Concurrency {
-		go s.worker()
-	}
+	s.logger.Info().Uint16("port", s.config.Port).Msg("Start listening")
+	go s.worker()
 	return nil
 }
 
@@ -94,11 +91,18 @@ func (s *tcpServer) halt(unexpected bool) {
 
 func (s *tcpServer) worker() {
 	defer s.halt(true)
-	defer s.waitGroup.Done()
 	listener := s.listener.Load()
 	for {
+		// acquiring a slot in the semaphore, blocking while full
+		select {
+		case <-s.ctx.Done():
+			s.logger.Error().Err(s.ctx.Err()).Msg("Stop accepting connection")
+			return
+		case s.semaphore <- struct{}{}:
+		}
+		// accept a connection and execute the connection handler
 		if connection, err := listener.AcceptTCP(); err == nil {
-			s.execute(connection)
+			go s.execute(connection)
 			continue
 		} else if s.listener.Load() != nil {
 			s.logger.Error().Err(err).Msg("Failed to accept connection")
@@ -108,6 +112,7 @@ func (s *tcpServer) worker() {
 }
 
 func (s *tcpServer) execute(connection *net.TCPConn) {
+	s.waitGroup.Add(1)
 	logger := s.logger.With().Str("connection_id", fmt.Sprintf("%016x", rand.Uint64())).Logger()
 	logger.Info().
 		Stringer("remote_address", connection.RemoteAddr()).
@@ -117,6 +122,8 @@ func (s *tcpServer) execute(connection *net.TCPConn) {
 		if recovered := recover(); recovered != nil {
 			logger.Error().Any("recovered", recovered).Msg("Panic while handling connection")
 		}
+		s.waitGroup.Done()
+		<-s.semaphore
 		logger.Info().
 			Stringer("remote_address", connection.RemoteAddr()).
 			Stringer("local_address", connection.LocalAddr()).
@@ -134,7 +141,7 @@ func (s *tcpServer) execute(connection *net.TCPConn) {
 
 func (s *tcpServer) onStop(ctx context.Context) error {
 	s.halt(false)
-	s.logger.Info().Stringer("addr", s.config.Address).Msg("Stop listening")
+	s.logger.Info().Uint16("port", s.config.Port).Msg("Stop listening")
 	go func() {
 		s.waitGroup.Wait()
 		s.cancel()
