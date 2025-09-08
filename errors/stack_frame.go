@@ -16,7 +16,15 @@ func (f StackFrame) MarshalZerologObject(event *zerolog.Event) {
 	event.Str("function", f.Function).Str("file", f.File).Int("line", f.Line)
 }
 
-func StackFrames(skip int) []StackFrame {
+type StackFrames []StackFrame
+
+func (s StackFrames) MarshalZerologArray(array *zerolog.Array) {
+	for _, frame := range s {
+		array.Object(frame)
+	}
+}
+
+func StackTrace(skip int) StackFrames {
 	// get stack trace
 	const depth = 32
 	var programCounters [depth]uintptr

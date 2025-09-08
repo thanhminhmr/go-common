@@ -110,7 +110,7 @@ func (e String) GetStackTrace() []StackFrame {
 func (e String) FillStackTrace(skip int) Error {
 	return fullError{
 		String:     string(e),
-		StackTrace: StackFrames(skip + 1),
+		StackTrace: StackTrace(skip + 1),
 	}
 }
 
@@ -200,6 +200,6 @@ func (e fullError) GetStackTrace() []StackFrame {
 }
 
 func (e fullError) FillStackTrace(skip int) Error {
-	e.StackTrace = StackFrames(skip + 1)
+	e.StackTrace = StackTrace(skip + 1)
 	return e
 }

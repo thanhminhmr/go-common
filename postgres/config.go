@@ -6,11 +6,10 @@ import (
 
 // Config defines the options that are used when connecting to a PostgreSQL instance
 type Config struct {
-	Host         string `env:"POSTGRES_HOST"`
-	Port         string `env:"POSTGRES_PORT"`
-	Username     string `env:"POSTGRES_USER"`
-	Password     string `env:"POSTGRES_PASSWORD"`
-	DatabaseName string `env:"POSTGRES_DB_NAME"`
+	Address      string `env:"POSTGRES_ADDRESS" validate:"required,hostname_port"`
+	Username     string `env:"POSTGRES_USER" validate:"required"`
+	Password     string `env:"POSTGRES_PASSWORD" validate:"required"`
+	DatabaseName string `env:"POSTGRES_DB_NAME" validate:"required"`
 }
 
 // ExtraConfig defines extra options that are used when connecting to a PostgreSQL instance
@@ -19,11 +18,11 @@ type ExtraConfig struct {
 	SSLCert           string `env:"POSTGRES_SSL_CERT"`
 	SSLKey            string `env:"POSTGRES_SSL_KEY"`
 	SSLRootCert       string `env:"POSTGRES_SSL_ROOT_CERT"`
-	ConnectionTimeout int32  `env:"POSTGRES_CONNECTION_TIMEOUT"`
-	MinConnections    int32  `env:"POSTGRES_MIN_CONNECTIONS"`
-	MaxConnections    int32  `env:"POSTGRES_MAX_CONNECTIONS"`
-	MaxRetry          uint64 `env:"POSTGRES_MAX_RETRY"`
-	RetryInterval     uint64 `env:"POSTGRES_RETRY_INTERVAL"`
+	ConnectionTimeout uint   `env:"POSTGRES_CONNECTION_TIMEOUT" validate:"min=0,max=60"`
+	MinConnections    uint   `env:"POSTGRES_MIN_CONNECTIONS" validate:"min=0,max=256"`
+	MaxConnections    uint   `env:"POSTGRES_MAX_CONNECTIONS" validate:"min=0,max=256"`
+	MaxRetry          uint   `env:"POSTGRES_MAX_RETRY" validate:"min=0,max=1000"`
+	RetryInterval     uint   `env:"POSTGRES_RETRY_INTERVAL" validate:"min=1,max=3600"`
 	LogLevel          string `env:"POSTGRES_LOG_LEVEL"`
 }
 

@@ -37,9 +37,9 @@ func (t _transaction[pgxTransaction]) Finalize(ctx context.Context, errorResult 
 	var errorChain errors.Error
 	// check for commit condition and try to commit
 	if *errorResult != nil {
-		errorChain, _ = (*errorResult).(errors.Error)
+		// transaction rollback on error
 	} else if recovered = recover(); recovered != nil {
-		errorChain = errors.String("transaction rollback on panic").SetRecovered(recovered)
+		// transaction rollback on panic without changing anything
 	} else if err := ctx.Err(); err != nil {
 		errorChain = errors.String("transaction rollback on context error").AddCause(err)
 	} else if err := t.pgx.Commit(ctx); err != nil {
@@ -48,15 +48,19 @@ func (t _transaction[pgxTransaction]) Finalize(ctx context.Context, errorResult 
 		return
 	}
 	// either commit condition failed or commit failed, try rolling back
-	if err := t.pgx.Rollback(ctx); err != nil {
+	if err := t.pgx.Rollback(ctx); err != nil && recovered == nil {
 		if errorChain == nil {
-			errorChain = errors.String("transaction rollback on error").AddCause(err)
+			// only wrap the error if needed
+			var ok bool
+			if errorChain, ok = (*errorResult).(errors.Error); !ok {
+				errorChain = errors.String("transaction rollback on error").AddCause(*errorResult)
+			}
 		}
-		errorChain = errorChain.AddSuppressed(errors.String("transaction rollback error").AddCause(err))
+		errorChain = errorChain.AddSuppressed(errors.String("transaction rollback failed").AddCause(err))
 	}
-	// if recovered from panic, panic with wrapped error
+	// if recovered from panic, re-panic as it
 	if recovered != nil {
-		panic(errorChain)
+		panic(recovered)
 	}
 	// if error got wrapped, return the wrapped error
 	if errorChain != nil {

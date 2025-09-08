@@ -11,9 +11,9 @@ import (
 	"reflect"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/thanhminhmr/go-common/errors"
+	"github.com/thanhminhmr/go-common/internal"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
@@ -21,11 +21,23 @@ import (
 	"github.com/rs/zerolog"
 )
 
-func ServerRequestParser[ServerRequest any](handler func(ctx context.Context, request *ServerRequest) ServerResponse) http.HandlerFunc {
+type ServerRequestHandler[ServerRequest any] interface {
+	Handle(ctx context.Context, request *ServerRequest) ServerResponse
+}
+
+type ServerRequestHandlerFunc[ServerRequest any] func(ctx context.Context, request *ServerRequest) ServerResponse
+
+func (f ServerRequestHandlerFunc[ServerRequest]) Handle(ctx context.Context, request *ServerRequest) ServerResponse {
+	return f(ctx, request)
+}
+
+func ServerRequestParser[ServerRequest any](handler ServerRequestHandler[ServerRequest]) http.HandlerFunc {
 	tags := checkServerRequestConfiguration[ServerRequest]()
 	return func(writer http.ResponseWriter, request *http.Request) {
 		var parsed ServerRequest
-		serverRequestHandler(writer, request, &parsed, tags, func() ServerResponse { return handler(request.Context(), &parsed) })
+		serverRequestHandler(writer, request, &parsed, tags, func() ServerResponse {
+			return handler.Handle(request.Context(), &parsed)
+		})
 	}
 }
 
@@ -352,22 +364,9 @@ func bindBody(request *http.Request, parsed any, fieldIndex int) {
 	reflect.ValueOf(parsed).Elem().Field(fieldIndex).Set(reflect.ValueOf(request.Body))
 }
 
-var serverDecodeHookTextBased = mapstructure.ComposeDecodeHookFunc(
-	mapstructure.TextUnmarshallerHookFunc(),
-	mapstructure.StringToBasicTypeHookFunc(),
-	mapstructure.StringToTimeHookFunc(time.RFC3339Nano),
-	mapstructure.StringToURLHookFunc(),
-	mapstructure.StringToIPHookFunc(),
-	mapstructure.StringToIPNetHookFunc(),
-	mapstructure.StringToNetIPAddrHookFunc(),
-	mapstructure.StringToNetIPAddrPortHookFunc(),
-	mapstructure.StringToNetIPPrefixHookFunc(),
-	singleElementSliceUnboxHookFunc,
-)
-
 func bind(tag string, input any, output any) error {
 	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
-		DecodeHook:           serverDecodeHookTextBased,
+		DecodeHook:           internal.DefaultDecodeHookFunc,
 		WeaklyTypedInput:     true,
 		Result:               output,
 		TagName:              tag,
@@ -380,20 +379,6 @@ func bind(tag string, input any, output any) error {
 		return errors.String("Decode failed").AddCause(err)
 	}
 	return nil
-}
-
-func singleElementSliceUnboxHookFunc(from reflect.Value, to reflect.Value) (any, error) {
-	// convert single value slice to value
-	if from.Kind() == reflect.Slice && from.Len() == 1 {
-		toType := to.Type()
-		for toType.Kind() == reflect.Ptr {
-			toType = toType.Elem()
-		}
-		if toType.Kind() != reflect.Slice {
-			return from.Index(0).Interface(), nil
-		}
-	}
-	return from.Interface(), nil
 }
 
 //endregion parseServerRequest

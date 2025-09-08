@@ -4,6 +4,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/thanhminhmr/go-common/internal"
+
 	"github.com/go-viper/mapstructure/v2"
 )
 
@@ -41,7 +43,7 @@ func Load[T any](config *T, prefixes ...string) error {
 	}
 	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
 		TagName:          "env",
-		DecodeHook:       mapstructure.StringToSliceHookFunc(","),
+		DecodeHook:       internal.SplitSemicolonsDecodeHookFunc,
 		ZeroFields:       true,
 		WeaklyTypedInput: true,
 		Result:           config,
@@ -49,7 +51,10 @@ func Load[T any](config *T, prefixes ...string) error {
 	if err != nil {
 		return err
 	}
-	return decoder.Decode(getEnvironment(prefix))
+	if err := decoder.Decode(getEnvironment(prefix)); err != nil {
+		return err
+	}
+	return internal.Validator.Struct(config)
 }
 
 func Loader[T any](config *T, prefixes ...string) func() (*T, error) {

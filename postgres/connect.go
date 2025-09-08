@@ -16,9 +16,9 @@ import (
 	"github.com/sethvargo/go-retry"
 )
 
-// ConnectToPostgreSQL Connect to the PostgreSQL database that are specified in
+// Connect to the PostgreSQL database that are specified in
 // the environment variables. Migrate the database if required.
-func ConnectToPostgreSQL(
+func Connect(
 	logger *zerolog.Logger,
 	config *Config,
 	extraConfig *ExtraConfig,
@@ -42,13 +42,13 @@ func ConnectToPostgreSQL(
 		Logger:   tracelog.LoggerFunc(contextLogger),
 		LogLevel: logLevel,
 	}
-	parsedConfig.MinConns = extraConfig.MinConnections
-	parsedConfig.MaxConns = extraConfig.MaxConnections
+	parsedConfig.MinConns = int32(extraConfig.MinConnections)
+	parsedConfig.MaxConns = int32(extraConfig.MaxConnections)
 
 	// try connect
 	var pool *pgxpool.Pool
 	backoff := retry.WithMaxRetries(
-		extraConfig.MaxRetry,
+		uint64(extraConfig.MaxRetry),
 		retry.NewConstant(time.Duration(extraConfig.RetryInterval)*time.Second),
 	)
 	if err := retry.Do(context.Background(), backoff, retryConnect(logger, parsedConfig, &pool)); err != nil {
@@ -74,13 +74,9 @@ func ConnectToPostgreSQL(
 }
 
 func connectionURL(config *Config, extraConfig *ExtraConfig) string {
-	host := config.Host
-	if port := config.Port; port != "" {
-		host = host + ":" + port
-	}
 	targetUrl := &url.URL{
-		Scheme: "postgres",
-		Host:   host,
+		Scheme: "postgresql",
+		Host:   config.Address,
 		Path:   config.DatabaseName,
 	}
 	if config.Username != "" || config.Password != "" {
