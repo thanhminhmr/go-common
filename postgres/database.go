@@ -1,21 +1,17 @@
 package postgres
 
+import "github.com/jackc/pgx/v5/pgxpool"
+
 type Database interface {
 	Connection
 
-	Close()
+	close()
 }
 
-type _pgxDatabase interface {
-	_pgxConnection
-
-	Close()
+type _database struct {
+	_connection[*pgxpool.Pool]
 }
 
-type _database[pgxDatabase _pgxDatabase] struct {
-	_connection[pgxDatabase]
-}
-
-func (d _database[pgxDatabase]) Close() {
+func (d _database) close() {
 	d.pgx.Close()
 }

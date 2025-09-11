@@ -4,8 +4,6 @@ import (
 	"context"
 )
 
-// ========================================
-
 type CommandTag interface {
 	String() string
 	RowsAffected() int64
@@ -16,8 +14,6 @@ type CommandTag interface {
 }
 
 type CommandTagHandler func(ctx context.Context, tag CommandTag) error
-
-// ========================================
 
 type RowScanner func(destination ...any) error
 

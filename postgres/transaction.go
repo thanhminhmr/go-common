@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/thanhminhmr/go-common/errors"
 )
 
@@ -18,18 +19,11 @@ type Transaction interface {
 	Finalize(ctx context.Context, errorResult *error)
 }
 
-type _pgxTransaction interface {
-	_pgxConnection
-
-	Commit(ctx context.Context) error
-	Rollback(ctx context.Context) error
+type _transaction struct {
+	_connection[pgx.Tx]
 }
 
-type _transaction[pgxTransaction _pgxTransaction] struct {
-	_connection[pgxTransaction]
-}
-
-func (t _transaction[pgxTransaction]) Finalize(ctx context.Context, errorResult *error) {
+func (t _transaction) Finalize(ctx context.Context, errorResult *error) {
 	if errorResult == nil {
 		panic("BUG: errorResult is nil")
 	}

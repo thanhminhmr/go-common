@@ -16,7 +16,6 @@ type Connection interface {
 
 	// Batch creates a batch of commands.
 	Batch(ctx context.Context) Batch
-	rawSendBatch(ctx context.Context, batch *pgx.Batch) pgx.BatchResults
 
 	// Exec execute the command.
 	Exec(ctx context.Context, sql string, args ...any) (CommandTag, error)
@@ -27,8 +26,25 @@ type Connection interface {
 	// QueryRow expects the result is exactly one row.
 	QueryRow(ctx context.Context, sql string, args ...any) (RowScanner, error)
 
-	transactionalCopy(ctx context.Context, tableName string, columnNames []string, source pgx.CopyFromSource, sourceCount int) error
-	rawCopy(ctx context.Context, tableName string, columnNames []string, source pgx.CopyFromSource) (int64, error)
+	// internalSendBatch internal function to send a batch
+	internalSendBatch(ctx context.Context, batch *pgx.Batch) pgx.BatchResults
+
+	// internalCopyAll internal function to copy all data from slice to database
+	internalCopyAll(
+		ctx context.Context,
+		tableName string,
+		columnNames []string,
+		source pgx.CopyFromSource,
+		sourceCount int,
+	) error
+
+	// internalCopyAny internal function to copy any data from slice to database
+	internalCopyAny(
+		ctx context.Context,
+		tableName string,
+		columnNames []string,
+		source pgx.CopyFromSource,
+	) (int64, error)
 }
 
 type _pgxConnection interface {
@@ -45,7 +61,7 @@ type _connection[pgxConnection _pgxConnection] struct {
 
 func (c _connection[pgxConnection]) Begin(ctx context.Context) (Transaction, error) {
 	if tx, err := c.pgx.Begin(ctx); err == nil {
-		return &_transaction[pgx.Tx]{
+		return &_transaction{
 			_connection: _connection[pgx.Tx]{
 				pgx: tx,
 			},
@@ -53,7 +69,6 @@ func (c _connection[pgxConnection]) Begin(ctx context.Context) (Transaction, err
 	} else {
 		return nil, errors.String("Begin transaction failed").AddCause(err)
 	}
-
 }
 
 func (c _connection[pgxConnection]) Batch(ctx context.Context) Batch {
@@ -64,10 +79,6 @@ func (c _connection[pgxConnection]) Batch(ctx context.Context) Batch {
 	}
 }
 
-func (c _connection[pgxConnection]) rawSendBatch(ctx context.Context, batch *pgx.Batch) pgx.BatchResults {
-	return c.pgx.SendBatch(ctx, batch)
-}
-
 func (c _connection[pgxConnection]) Exec(ctx context.Context, sql string, args ...any) (CommandTag, error) {
 	if tag, err := c.pgx.Exec(ctx, sql, args...); err != nil {
 		return nil, errors.String("Exec failed").AddCause(err)
@@ -76,7 +87,12 @@ func (c _connection[pgxConnection]) Exec(ctx context.Context, sql string, args .
 	}
 }
 
-func (c _connection[pgxConnection]) Query(ctx context.Context, collector RowCollector, sql string, args ...any) (tag CommandTag, errorResult error) {
+func (c _connection[pgxConnection]) Query(
+	ctx context.Context,
+	collector RowCollector,
+	sql string,
+	args ...any,
+) (tag CommandTag, errorResult error) {
 	if collector == nil {
 		panic("BUG: collector is nil")
 	}
@@ -140,14 +156,24 @@ func (c _connection[pgxConnection]) QueryRow(ctx context.Context, sql string, ar
 	}
 }
 
-func (c _connection[pgxConnection]) transactionalCopy(ctx context.Context, tableName string, columnNames []string, source pgx.CopyFromSource, sourceCount int) (errorResult error) {
+func (c _connection[pgxConnection]) internalSendBatch(ctx context.Context, batch *pgx.Batch) pgx.BatchResults {
+	return c.pgx.SendBatch(ctx, batch)
+}
+
+func (c _connection[pgxConnection]) internalCopyAll(
+	ctx context.Context,
+	tableName string,
+	columnNames []string,
+	source pgx.CopyFromSource,
+	sourceCount int,
+) (errorResult error) {
 	transaction, err := c.Begin(ctx)
 	if err != nil {
 		return errors.String("transactional copy failed").AddCause(err)
 	}
 	defer transaction.Finalize(ctx, &errorResult)
 	// call raw copy and check the result
-	if count, err := transaction.rawCopy(ctx, tableName, columnNames, source); err != nil {
+	if count, err := transaction.internalCopyAny(ctx, tableName, columnNames, source); err != nil {
 		return errors.String("transactional copy failed").AddCause(err)
 	} else if count != int64(sourceCount) {
 		return errors.Template("transactional copy failed: count (%d) != sourceCount (%d)").Format(count, sourceCount)
@@ -155,7 +181,12 @@ func (c _connection[pgxConnection]) transactionalCopy(ctx context.Context, table
 	return nil
 }
 
-func (c _connection[pgxConnection]) rawCopy(ctx context.Context, tableName string, columnNames []string, source pgx.CopyFromSource) (int64, error) {
+func (c _connection[pgxConnection]) internalCopyAny(
+	ctx context.Context,
+	tableName string,
+	columnNames []string,
+	source pgx.CopyFromSource,
+) (int64, error) {
 	count, err := c.pgx.CopyFrom(ctx, pgx.Identifier{tableName}, columnNames, source)
 	if err != nil {
 		return count, errors.String("raw copy failed").AddCause(err)
@@ -179,7 +210,7 @@ func CopyAllFromSlice[T any](
 		output: make([]any, len(columnNames)),
 		index:  -1,
 	}
-	err := connection.transactionalCopy(ctx, tableName, columnNames, source, len(input))
+	err := connection.internalCopyAll(ctx, tableName, columnNames, source, len(input))
 	if err != nil {
 		return errors.String("copy all from slice failed").AddCause(err)
 	}
@@ -200,7 +231,7 @@ func CopyAnyFromSlice[T any](
 		output: make([]any, len(columnNames)),
 		index:  -1,
 	}
-	count, err := connection.rawCopy(ctx, tableName, columnNames, source)
+	count, err := connection.internalCopyAny(ctx, tableName, columnNames, source)
 	if err != nil {
 		return count, errors.String("copy any from slice failed").AddCause(err)
 	}
@@ -222,6 +253,7 @@ func (copy *fromSlice[T]) Next() bool {
 }
 
 func (copy *fromSlice[T]) Values() ([]any, error) {
+	clear(copy.output)
 	copy.mapper(copy.output, copy.input[copy.index])
 	return copy.output, nil
 }

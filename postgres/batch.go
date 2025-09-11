@@ -100,9 +100,9 @@ func (b *_batch) QueryRow(collector RowCollector, sql string, args ...any) {
 }
 
 func (b *_batch) Send() error {
-	if connection, _ := b.connection.Swap(nil).(Connection); connection == nil {
+	if connection, _ := b.connection.Swap(nil).(Database); connection == nil {
 		panic("BUG: batch already sent")
-	} else if err := connection.rawSendBatch(b.ctx, &b.batch).Close(); err != nil {
+	} else if err := connection.internalSendBatch(b.ctx, &b.batch).Close(); err != nil {
 		return errors.String("Send batch failed").AddCause(err)
 	}
 	return nil
