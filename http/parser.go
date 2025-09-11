@@ -21,22 +21,14 @@ import (
 	"github.com/rs/zerolog"
 )
 
-type ServerRequestHandler[ServerRequest any] interface {
-	Handle(ctx context.Context, request *ServerRequest) ServerResponse
-}
-
-type ServerRequestHandlerFunc[ServerRequest any] func(ctx context.Context, request *ServerRequest) ServerResponse
-
-func (f ServerRequestHandlerFunc[ServerRequest]) Handle(ctx context.Context, request *ServerRequest) ServerResponse {
-	return f(ctx, request)
-}
+type ServerRequestHandler[ServerRequest any] func(ctx context.Context, request *ServerRequest) ServerResponse
 
 func ServerRequestParser[ServerRequest any](handler ServerRequestHandler[ServerRequest]) http.HandlerFunc {
 	tags := checkServerRequestConfiguration[ServerRequest]()
 	return func(writer http.ResponseWriter, request *http.Request) {
 		var parsed ServerRequest
 		serverRequestHandler(writer, request, &parsed, tags, func() ServerResponse {
-			return handler.Handle(request.Context(), &parsed)
+			return handler(request.Context(), &parsed)
 		})
 	}
 }
