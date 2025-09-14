@@ -29,17 +29,8 @@ type Connection interface {
 	// internalSendBatch internal function to send a batch
 	internalSendBatch(ctx context.Context, batch *pgx.Batch) pgx.BatchResults
 
-	// internalCopyAll internal function to copy all data from slice to database
-	internalCopyAll(
-		ctx context.Context,
-		tableName string,
-		columnNames []string,
-		source pgx.CopyFromSource,
-		sourceCount int,
-	) error
-
-	// internalCopyAny internal function to copy any data from slice to database
-	internalCopyAny(
+	// internalCopyFrom internal function to copy any data from source to database
+	internalCopyFrom(
 		ctx context.Context,
 		tableName string,
 		columnNames []string,
@@ -160,64 +151,48 @@ func (c _connection[pgxConnection]) internalSendBatch(ctx context.Context, batch
 	return c.pgx.SendBatch(ctx, batch)
 }
 
-func (c _connection[pgxConnection]) internalCopyAll(
-	ctx context.Context,
-	tableName string,
-	columnNames []string,
-	source pgx.CopyFromSource,
-	sourceCount int,
-) (errorResult error) {
-	transaction, err := c.Begin(ctx)
-	if err != nil {
-		return errors.String("transactional copy failed").AddCause(err)
-	}
-	defer transaction.Finalize(ctx, &errorResult)
-	// call raw copy and check the result
-	if count, err := transaction.internalCopyAny(ctx, tableName, columnNames, source); err != nil {
-		return errors.String("transactional copy failed").AddCause(err)
-	} else if count != int64(sourceCount) {
-		return errors.Template("transactional copy failed: count (%d) != sourceCount (%d)").Format(count, sourceCount)
-	}
-	return nil
-}
-
-func (c _connection[pgxConnection]) internalCopyAny(
+func (c _connection[pgxConnection]) internalCopyFrom(
 	ctx context.Context,
 	tableName string,
 	columnNames []string,
 	source pgx.CopyFromSource,
 ) (int64, error) {
-	count, err := c.pgx.CopyFrom(ctx, pgx.Identifier{tableName}, columnNames, source)
-	if err != nil {
-		return count, errors.String("raw copy failed").AddCause(err)
-	}
-	return count, nil
+	return c.pgx.CopyFrom(ctx, pgx.Identifier{tableName}, columnNames, source)
 }
 
 // ========================================
 
-func CopyAllFromSlice[T any](
+func CopyAll[T any](
 	connection Connection,
 	ctx context.Context,
 	tableName string,
 	columnNames []string,
 	input []T,
 	outputMapper SliceMapper[T],
-) error {
+) (errorResult error) {
+	// create transaction
+	transaction, err := connection.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer transaction.Finalize(ctx, &errorResult)
+	// create source
 	source := &fromSlice[T]{
 		mapper: outputMapper,
 		input:  input,
 		output: make([]any, len(columnNames)),
 		index:  -1,
 	}
-	err := connection.internalCopyAll(ctx, tableName, columnNames, source, len(input))
-	if err != nil {
-		return errors.String("copy all from slice failed").AddCause(err)
+	// call raw copy and check the result
+	if count, err := transaction.internalCopyFrom(ctx, tableName, columnNames, source); err != nil {
+		return errors.String("CopyAll failed").AddCause(err)
+	} else if count != int64(len(input)) {
+		return errors.String("CopyAll failed: cannot copy all from source")
 	}
 	return nil
 }
 
-func CopyAnyFromSlice[T any](
+func CopyAny[T any](
 	connection Connection,
 	ctx context.Context,
 	tableName string,
@@ -231,9 +206,9 @@ func CopyAnyFromSlice[T any](
 		output: make([]any, len(columnNames)),
 		index:  -1,
 	}
-	count, err := connection.internalCopyAny(ctx, tableName, columnNames, source)
+	count, err := connection.internalCopyFrom(ctx, tableName, columnNames, source)
 	if err != nil {
-		return count, errors.String("copy any from slice failed").AddCause(err)
+		return count, errors.String("CopyAny failed").AddCause(err)
 	}
 	return count, nil
 }
