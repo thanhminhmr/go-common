@@ -2,6 +2,7 @@ package log
 
 import (
 	"github.com/rs/zerolog"
+	"go.uber.org/dig"
 	"go.uber.org/fx/fxevent"
 )
 
@@ -36,7 +37,7 @@ func (l fxLogger) LogEvent(event fxevent.Event) {
 			l.Error().
 				Str("callee", e.FunctionName).
 				Str("caller", e.CallerName).
-				Err(e.Err).
+				Err(dig.RootCause(e.Err)).
 				Msg("OnStart hook failed")
 		} else {
 			l.Trace().
@@ -55,7 +56,7 @@ func (l fxLogger) LogEvent(event fxevent.Event) {
 			l.Error().
 				Str("callee", e.FunctionName).
 				Str("caller", e.CallerName).
-				Err(e.Err).
+				Err(dig.RootCause(e.Err)).
 				Msg("OnStop hook failed")
 		} else {
 			l.Trace().
@@ -71,7 +72,7 @@ func (l fxLogger) LogEvent(event fxevent.Event) {
 				Strs("moduleTrace", e.ModuleTrace).
 				Strs("stackTrace", e.StackTrace).
 				EmbedObject(moduleName(e.ModuleName)).
-				Err(e.Err).
+				Err(dig.RootCause(e.Err)).
 				Msg("Error encountered while applying options")
 		} else {
 			l.Info().
@@ -89,7 +90,7 @@ func (l fxLogger) LogEvent(event fxevent.Event) {
 				Strs("moduleTrace", e.ModuleTrace).
 				Strs("stackTrace", e.StackTrace).
 				EmbedObject(moduleName(e.ModuleName)).
-				Err(e.Err).
+				Err(dig.RootCause(e.Err)).
 				Msg("Error encountered while applying options")
 		} else {
 			l.Info().
@@ -106,7 +107,7 @@ func (l fxLogger) LogEvent(event fxevent.Event) {
 				Strs("moduleTrace", e.ModuleTrace).
 				Strs("stackTrace", e.StackTrace).
 				EmbedObject(moduleName(e.ModuleName)).
-				Err(e.Err).
+				Err(dig.RootCause(e.Err)).
 				Msg("Error encountered while replacing")
 		} else {
 			l.Info().
@@ -122,7 +123,7 @@ func (l fxLogger) LogEvent(event fxevent.Event) {
 				Strs("moduleTrace", e.ModuleTrace).
 				Strs("stackTrace", e.StackTrace).
 				EmbedObject(moduleName(e.ModuleName)).
-				Err(e.Err).
+				Err(dig.RootCause(e.Err)).
 				Msg("Error encountered while applying options")
 		} else {
 			l.Info().
@@ -143,7 +144,7 @@ func (l fxLogger) LogEvent(event fxevent.Event) {
 				Str("name", e.Name).
 				Str("kind", e.Kind).
 				EmbedObject(moduleName(e.ModuleName)).
-				Err(e.Err).
+				Err(dig.RootCause(e.Err)).
 				Dur("runtime", e.Runtime).
 				Msg("Run failed")
 		} else {
@@ -165,7 +166,7 @@ func (l fxLogger) LogEvent(event fxevent.Event) {
 			l.Error().
 				Str("function", e.FunctionName).
 				EmbedObject(moduleName(e.ModuleName)).
-				Err(e.Err).
+				Err(dig.RootCause(e.Err)).
 				Str("stack", e.Trace).
 				Msg("Invoke failed")
 		}
@@ -175,23 +176,23 @@ func (l fxLogger) LogEvent(event fxevent.Event) {
 			Msg("Received signal")
 	case *fxevent.Stopped:
 		if e.Err != nil {
-			l.Error().Err(e.Err).Msg("Stop failed")
+			l.Error().Err(dig.RootCause(e.Err)).Msg("Stop failed")
 		}
 	case *fxevent.RollingBack:
 		l.Error().Err(e.StartErr).Msg("Start failed, rolling back")
 	case *fxevent.RolledBack:
 		if e.Err != nil {
-			l.Error().Err(e.Err).Msg("Rollback failed")
+			l.Error().Err(dig.RootCause(e.Err)).Msg("Rollback failed")
 		}
 	case *fxevent.Started:
 		if e.Err != nil {
-			l.Error().Err(e.Err).Msg("Start failed")
+			l.Error().Err(dig.RootCause(e.Err)).Msg("Start failed")
 		} else {
 			l.Info().Msg("Started")
 		}
 	case *fxevent.LoggerInitialized:
 		if e.Err != nil {
-			l.Error().Err(e.Err).Msg("Logger initialization failed")
+			l.Error().Err(dig.RootCause(e.Err)).Msg("Logger initialization failed")
 		} else {
 			l.Info().Str("function", e.ConstructorName).Msg("Initialized logger")
 		}
