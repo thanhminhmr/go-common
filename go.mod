@@ -12,11 +12,6 @@ require (
 	go.uber.org/fx v1.24.0
 )
 
-replace (
-	go.uber.org/multierr => ./external/multierr
-	go.uber.org/zap => ./external/zap
-)
-
 require (
 	github.com/gabriel-vasile/mimetype v1.4.10 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
