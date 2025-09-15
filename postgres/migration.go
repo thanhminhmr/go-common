@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/thanhminhmr/go-common/errors"
+	"github.com/thanhminhmr/go-common/exception"
 )
 
 type MigrationPlan []MigrationRecord
@@ -79,7 +79,7 @@ func (migrationRecord MigrationRecord) migrate(ctx context.Context, database Dat
 		return err
 	}
 	if tag.RowsAffected() != 1 {
-		return errors.String("Failed to create migration record")
+		return exception.String("Failed to create migration record")
 	}
 	// success
 	return nil

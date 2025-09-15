@@ -1,14 +1,14 @@
-package errors
+package exception
 
-func is(source Error, target error) bool {
-	if err, ok := target.(Error); ok {
+func is(source Exception, target error) bool {
+	if err, ok := target.(Exception); ok {
 		return source.Error() == err.Error()
 	}
 	return false
 }
 
-func as(source Error, target any) bool {
-	if err, ok := target.(*Error); ok {
+func as(source Exception, target any) bool {
+	if err, ok := target.(*Exception); ok {
 		if source.Error() == (*err).Error() {
 			*err = source
 			return true

@@ -12,7 +12,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/thanhminhmr/go-common/errors"
+	"github.com/thanhminhmr/go-common/exception"
 	"github.com/thanhminhmr/go-common/internal"
 
 	"github.com/go-chi/chi/v5"
@@ -190,7 +190,7 @@ func parseServerRequest(request *http.Request, parsed any, tags serverRequestCon
 		}
 		if err := serverRequestValidator.Struct(parsed); err != nil {
 			errorResponse = &ServerErrorResponse{
-				Cause:  errors.String("Request body is not valid").AddCause(err),
+				Cause:  exception.String("Request body is not valid").AddCause(err),
 				Status: http.StatusBadRequest,
 			}
 		}
@@ -201,7 +201,7 @@ func parseServerRequest(request *http.Request, parsed any, tags serverRequestCon
 		contentType := request.Header.Get("Content-Type")
 		if contentType == "" {
 			return &ServerErrorResponse{
-				Cause:  errors.String("Content-Type is missing"),
+				Cause:  exception.String("Content-Type is missing"),
 				Status: http.StatusUnsupportedMediaType,
 			}
 		}
@@ -209,7 +209,7 @@ func parseServerRequest(request *http.Request, parsed any, tags serverRequestCon
 		contentType, contentTypeParameters, err := mime.ParseMediaType(contentType)
 		if err != nil {
 			return &ServerErrorResponse{
-				Cause:  errors.String("Content-Type is invalid").AddCause(err),
+				Cause:  exception.String("Content-Type is invalid").AddCause(err),
 				Status: http.StatusBadRequest,
 			}
 		}
@@ -232,7 +232,7 @@ func parseServerRequest(request *http.Request, parsed any, tags serverRequestCon
 		}
 		// nothing matched
 		return &ServerErrorResponse{
-			Cause:  errors.String("Content-Type is unsupported"),
+			Cause:  exception.String("Content-Type is unsupported"),
 			Status: http.StatusUnsupportedMediaType,
 		}
 	}
@@ -244,7 +244,7 @@ func bindHeader(request *http.Request, parsed any) *ServerErrorResponse {
 	if len(request.Header) > 0 {
 		if err := bind("header", request.Header, parsed); err != nil {
 			return &ServerErrorResponse{
-				Cause:  errors.String("Bind request header failed").AddCause(err),
+				Cause:  exception.String("Bind request header failed").AddCause(err),
 				Status: http.StatusInternalServerError,
 			}
 		}
@@ -261,7 +261,7 @@ func bindCookie(request *http.Request, parsed any) *ServerErrorResponse {
 		}
 		if err := bind("cookie", cookieMap, parsed); err != nil {
 			return &ServerErrorResponse{
-				Cause:  errors.String("Bind request cookies failed").AddCause(err),
+				Cause:  exception.String("Bind request cookies failed").AddCause(err),
 				Status: http.StatusInternalServerError,
 			}
 		}
@@ -274,7 +274,7 @@ func bindQuery(request *http.Request, parsed any) *ServerErrorResponse {
 	if values := request.URL.Query(); len(values) > 0 {
 		if err := bind("query", values, parsed); err != nil {
 			return &ServerErrorResponse{
-				Cause:  errors.String("Bind query values failed").AddCause(err),
+				Cause:  exception.String("Bind query values failed").AddCause(err),
 				Status: http.StatusInternalServerError,
 			}
 		}
@@ -292,7 +292,7 @@ func bindUrl(request *http.Request, parsed any) *ServerErrorResponse {
 		}
 		if err := bind("url", urlParams, parsed); err != nil {
 			return &ServerErrorResponse{
-				Cause:  errors.String("Bind url params failed").AddCause(err),
+				Cause:  exception.String("Bind url params failed").AddCause(err),
 				Status: http.StatusInternalServerError,
 			}
 		}
@@ -305,7 +305,7 @@ func bindForm(request *http.Request, parsed any) *ServerErrorResponse {
 	body, err := io.ReadAll(request.Body)
 	if err != nil {
 		return &ServerErrorResponse{
-			Cause:  errors.String("Read request body failed").AddCause(err),
+			Cause:  exception.String("Read request body failed").AddCause(err),
 			Status: http.StatusInternalServerError,
 		}
 	}
@@ -313,14 +313,14 @@ func bindForm(request *http.Request, parsed any) *ServerErrorResponse {
 	values, err := url.ParseQuery(string(body))
 	if err != nil {
 		return &ServerErrorResponse{
-			Cause:  errors.String("Parse form body failed").AddCause(err),
+			Cause:  exception.String("Parse form body failed").AddCause(err),
 			Status: http.StatusBadRequest,
 		}
 	}
 	// bind form body
 	if err := bind("form", values, parsed); err != nil {
 		return &ServerErrorResponse{
-			Cause:  errors.String("Bind form params failed").AddCause(err),
+			Cause:  exception.String("Bind form params failed").AddCause(err),
 			Status: http.StatusInternalServerError,
 		}
 	}
@@ -332,7 +332,7 @@ func bindJson(request *http.Request, parsed any, fieldIndex int) *ServerErrorRes
 	fieldAsInterface := reflect.ValueOf(parsed).Elem().Field(fieldIndex).Addr().Interface()
 	if err := json.NewDecoder(request.Body).Decode(fieldAsInterface); err != nil {
 		return &ServerErrorResponse{
-			Cause:  errors.String("Decode json body failed").AddCause(err),
+			Cause:  exception.String("Decode json body failed").AddCause(err),
 			Status: http.StatusInternalServerError,
 		}
 	}
@@ -344,7 +344,7 @@ func bindMultipart(request *http.Request, parsed any, fieldIndex int, parameters
 	boundary, ok := parameters["boundary"]
 	if !ok {
 		return &ServerErrorResponse{
-			Cause:  errors.String("Boundary is missing in Content-Type of a multipart/form-data"),
+			Cause:  exception.String("Boundary is missing in Content-Type of a multipart/form-data"),
 			Status: http.StatusBadRequest,
 		}
 	}
@@ -365,10 +365,10 @@ func bind(tag string, input any, output any) error {
 		IgnoreUntaggedFields: true,
 	})
 	if err != nil {
-		return errors.String("Create decoder failed").AddCause(err)
+		return exception.String("Create decoder failed").AddCause(err)
 	}
 	if err := decoder.Decode(input); err != nil {
-		return errors.String("Decode failed").AddCause(err)
+		return exception.String("Decode failed").AddCause(err)
 	}
 	return nil
 }

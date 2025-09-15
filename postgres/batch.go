@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync/atomic"
 
-	"github.com/thanhminhmr/go-common/errors"
+	"github.com/thanhminhmr/go-common/exception"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -28,7 +28,7 @@ func (b *_batch) Exec(handler CommandTagHandler, sql string, args ...any) {
 	if handler != nil {
 		query.Exec(func(tag pgconn.CommandTag) error {
 			if err := handler(b.ctx, tag); err != nil {
-				return errors.String("Exec in batch failed").AddCause(err)
+				return exception.String("Exec in batch failed").AddCause(err)
 			}
 			return nil
 		})
@@ -40,25 +40,25 @@ func (b *_batch) Query(collector RowCollector, handler CommandTagHandler, sql st
 		panic("BUG: collector is nil")
 	}
 	b.batch.Queue(sql, args...).Query(func(rows pgx.Rows) (errorResult error) {
-		var errorChain errors.Error
+		var errorChain exception.Exception
 		defer func() {
 			rows.Close()
 			if err := rows.Err(); err != nil {
 				if errorChain != nil {
 					errorChain = errorChain.AddSuppressed(err)
 				} else {
-					errorChain = errors.String("Query in batch failed").AddCause(err)
+					errorChain = exception.String("Query in batch failed").AddCause(err)
 				}
 			} else if errorChain == nil && handler != nil {
 				if err := handler(b.ctx, rows.CommandTag()); err != nil {
-					errorChain = errors.String("Query in batch failed").AddCause(err)
+					errorChain = exception.String("Query in batch failed").AddCause(err)
 				}
 			}
 			errorResult = errorChain
 		}()
 		for rows.Next() {
 			if err := collector(b.ctx, rows.Scan); err != nil {
-				errorChain = errors.String("Query in batch failed").AddCause(err)
+				errorChain = exception.String("Query in batch failed").AddCause(err)
 				return
 			}
 		}
@@ -71,28 +71,28 @@ func (b *_batch) QueryRow(collector RowCollector, sql string, args ...any) {
 		panic("BUG: collector is nil")
 	}
 	b.batch.Queue(sql, args...).Query(func(rows pgx.Rows) (errorResult error) {
-		var errorChain errors.Error
+		var exception exception.Exception
 		defer func() {
 			rows.Close()
 			if err := rows.Err(); err != nil {
-				if errorChain != nil {
-					errorChain = errorChain.AddSuppressed(err)
+				if exception != nil {
+					exception = exception.AddSuppressed(err)
 				} else {
-					errorChain = errors.String("QueryRow in batch failed").AddCause(err)
+					exception = exception.String("QueryRow in batch failed").AddCause(err)
 				}
 			}
-			errorResult = errorChain
+			errorResult = exception
 		}()
 		if !rows.Next() {
-			errorChain = errors.String("QueryRow in batch failed: no rows returned")
+			exception = exception.String("QueryRow in batch failed: no rows returned")
 			return
 		}
 		if err := collector(b.ctx, rows.Scan); err != nil {
-			errorChain = errors.String("QueryRow in batch failed").AddCause(err)
+			exception = exception.String("QueryRow in batch failed").AddCause(err)
 			return
 		}
 		if rows.Next() {
-			errorChain = errors.String("QueryRow in batch failed: more than one row returned")
+			exception = exception.String("QueryRow in batch failed: more than one row returned")
 			return
 		}
 		return
@@ -103,7 +103,7 @@ func (b *_batch) Send() error {
 	if connection, _ := b.connection.Swap(nil).(Database); connection == nil {
 		panic("BUG: batch already sent")
 	} else if err := connection.internalSendBatch(b.ctx, &b.batch).Close(); err != nil {
-		return errors.String("Send batch failed").AddCause(err)
+		return exception.String("Send batch failed").AddCause(err)
 	}
 	return nil
 }

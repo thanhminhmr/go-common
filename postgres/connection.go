@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync/atomic"
 
-	"github.com/thanhminhmr/go-common/errors"
+	"github.com/thanhminhmr/go-common/exception"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -58,7 +58,7 @@ func (c _connection[pgxConnection]) Begin(ctx context.Context) (Transaction, err
 			},
 		}, nil
 	} else {
-		return nil, errors.String("Begin transaction failed").AddCause(err)
+		return nil, exception.String("Begin transaction failed").AddCause(err)
 	}
 }
 
@@ -72,7 +72,7 @@ func (c _connection[pgxConnection]) Batch(ctx context.Context) Batch {
 
 func (c _connection[pgxConnection]) Exec(ctx context.Context, sql string, args ...any) (CommandTag, error) {
 	if tag, err := c.pgx.Exec(ctx, sql, args...); err != nil {
-		return nil, errors.String("Exec failed").AddCause(err)
+		return nil, exception.String("Exec failed").AddCause(err)
 	} else {
 		return &tag, nil
 	}
@@ -88,16 +88,16 @@ func (c _connection[pgxConnection]) Query(
 		panic("BUG: collector is nil")
 	}
 	if rows, err := c.pgx.Query(ctx, sql, args...); err != nil {
-		return nil, errors.String("Query failed").AddCause(err)
+		return nil, exception.String("Query failed").AddCause(err)
 	} else {
-		var errorChain errors.Error
+		var errorChain exception.Exception
 		defer func() {
 			rows.Close()
 			if err := rows.Err(); err != nil {
 				if errorChain != nil {
 					errorChain = errorChain.AddSuppressed(err)
 				} else {
-					errorChain = errors.String("Query failed").AddCause(err)
+					errorChain = exception.String("Query failed").AddCause(err)
 				}
 			} else if errorChain == nil {
 				tag = rows.CommandTag()
@@ -106,7 +106,7 @@ func (c _connection[pgxConnection]) Query(
 		}()
 		for rows.Next() {
 			if err := collector(ctx, rows.Scan); err != nil {
-				errorChain = errors.String("Query failed").AddCause(err)
+				errorChain = exception.String("Query failed").AddCause(err)
 				return
 			}
 		}
@@ -116,30 +116,30 @@ func (c _connection[pgxConnection]) Query(
 
 func (c _connection[pgxConnection]) QueryRow(ctx context.Context, sql string, args ...any) (RowScanner, error) {
 	if rows, err := c.pgx.Query(ctx, sql, args...); err != nil {
-		return nil, errors.String("QueryRow failed").AddCause(err)
+		return nil, exception.String("QueryRow failed").AddCause(err)
 	} else {
 		if !rows.Next() {
-			return nil, errors.String("QueryRow failed: no rows returned")
+			return nil, exception.String("QueryRow failed: no rows returned")
 		}
 		return func(destination ...any) (errorResult error) {
-			var errorChain errors.Error
+			var errorChain exception.Exception
 			defer func() {
 				rows.Close()
 				if err := rows.Err(); err != nil {
 					if errorChain != nil {
 						errorChain = errorChain.AddSuppressed(err)
 					} else {
-						errorChain = errors.String("QueryRow failed").AddCause(err)
+						errorChain = exception.String("QueryRow failed").AddCause(err)
 					}
 				}
 				errorResult = errorChain
 			}()
 			if err := rows.Scan(destination...); err != nil {
-				errorChain = errors.String("QueryRow failed").AddCause(err)
+				errorChain = exception.String("QueryRow failed").AddCause(err)
 				return
 			}
 			if rows.Next() {
-				errorChain = errors.String("QueryRow failed: more than one row returned")
+				errorChain = exception.String("QueryRow failed: more than one row returned")
 				return
 			}
 			return
@@ -185,9 +185,9 @@ func CopyAll[T any](
 	}
 	// call raw copy and check the result
 	if count, err := transaction.internalCopyFrom(ctx, tableName, columnNames, source); err != nil {
-		return errors.String("CopyAll failed").AddCause(err)
+		return exception.String("CopyAll failed").AddCause(err)
 	} else if count != int64(len(input)) {
-		return errors.String("CopyAll failed: cannot copy all from source")
+		return exception.String("CopyAll failed: cannot copy all from source")
 	}
 	return nil
 }
@@ -208,7 +208,7 @@ func CopyAny[T any](
 	}
 	count, err := connection.internalCopyFrom(ctx, tableName, columnNames, source)
 	if err != nil {
-		return count, errors.String("CopyAny failed").AddCause(err)
+		return count, exception.String("CopyAny failed").AddCause(err)
 	}
 	return count, nil
 }

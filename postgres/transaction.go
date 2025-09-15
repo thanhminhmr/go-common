@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/thanhminhmr/go-common/errors"
+	"github.com/thanhminhmr/go-common/exception"
 )
 
 type Transaction interface {
@@ -28,16 +28,16 @@ func (t _transaction) Finalize(ctx context.Context, errorResult *error) {
 		panic("BUG: errorResult is nil")
 	}
 	var recovered any
-	var errorChain errors.Error
+	var errorChain exception.Exception
 	// check for commit condition and try to commit
 	if *errorResult != nil {
 		// transaction rollback on error
 	} else if recovered = recover(); recovered != nil {
 		// transaction rollback on panic without changing anything
 	} else if err := ctx.Err(); err != nil {
-		errorChain = errors.String("transaction rollback on context error").AddCause(err)
+		errorChain = exception.String("transaction rollback on context error").AddCause(err)
 	} else if err := t.pgx.Commit(ctx); err != nil {
-		errorChain = errors.String("transaction rollback on commit error").AddCause(err)
+		errorChain = exception.String("transaction rollback on commit error").AddCause(err)
 	} else {
 		return
 	}
@@ -46,11 +46,11 @@ func (t _transaction) Finalize(ctx context.Context, errorResult *error) {
 		if errorChain == nil {
 			// only wrap the error if needed
 			var ok bool
-			if errorChain, ok = (*errorResult).(errors.Error); !ok {
-				errorChain = errors.String("transaction rollback on error").AddCause(*errorResult)
+			if errorChain, ok = (*errorResult).(exception.Exception); !ok {
+				errorChain = exception.String("transaction rollback on error").AddCause(*errorResult)
 			}
 		}
-		errorChain = errorChain.AddSuppressed(errors.String("transaction rollback failed").AddCause(err))
+		errorChain = errorChain.AddSuppressed(exception.String("transaction rollback failed").AddCause(err))
 	}
 	// if recovered from panic, re-panic as it
 	if recovered != nil {

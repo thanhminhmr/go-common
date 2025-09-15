@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/url"
 
-	"github.com/thanhminhmr/go-common/errors"
+	"github.com/thanhminhmr/go-common/exception"
 	"go.uber.org/fx"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -22,12 +22,12 @@ func New(
 	// parse configuration
 	parsedConfig, err := parseConfig(config)
 	if err != nil {
-		return nil, errors.String("Failed parsing config").AddCause(err)
+		return nil, exception.String("Failed parsing config").AddCause(err)
 	}
 	// try connect
 	pool, err := pgxpool.NewWithConfig(context.Background(), parsedConfig)
 	if err != nil {
-		return nil, errors.String("Failed to connect to database").AddCause(err)
+		return nil, exception.String("Failed to connect to database").AddCause(err)
 	}
 	// create database
 	database := &_database{_connection: _connection[*pgxpool.Pool]{pgx: pool}}
@@ -35,7 +35,7 @@ func New(
 	if plan != nil {
 		if err := plan.migrate(context.Background(), database); err != nil {
 			database.close()
-			return nil, errors.String("Failed to migrate database").AddCause(err)
+			return nil, exception.String("Failed to migrate database").AddCause(err)
 		}
 	}
 	// add on stop hook

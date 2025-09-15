@@ -1,19 +1,29 @@
 //go:build !no_zerolog
 
-package errors
+package exception
 
-import "github.com/rs/zerolog"
+import (
+	"github.com/rs/zerolog"
+)
 
 func (e String) MarshalZerologObject(event *zerolog.Event) {
 	event.Str("error", string(e))
 }
 
-func (e fullError) MarshalZerologObject(event *zerolog.Event) {
+func (e exception) MarshalZerologObject(event *zerolog.Event) {
 	event.Str("error", e.String)
-	if e.Cause != nil {
+	switch len(e.Cause) {
+	case 0: // skip
+	case 1:
+		event.AnErr("cause", e.Cause[0])
+	default:
 		event.Errs("cause", e.Cause)
 	}
-	if e.Suppressed != nil {
+	switch len(e.Suppressed) {
+	case 0: // skip
+	case 1:
+		event.AnErr("suppressed", e.Suppressed[0])
+	default:
 		event.Errs("suppressed", e.Suppressed)
 	}
 	if e.Recovered != nil {
@@ -25,7 +35,13 @@ func (e fullError) MarshalZerologObject(event *zerolog.Event) {
 }
 
 func (e multipleErrors) MarshalZerologObject(event *zerolog.Event) {
-	event.Errs("cause", e)
+	switch len(e) {
+	case 0: // skip
+	case 1:
+		event.AnErr("cause", e[0])
+	default:
+		event.Errs("cause", e)
+	}
 }
 
 func (f StackFrame) MarshalZerologObject(event *zerolog.Event) {

@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/thanhminhmr/go-common/configuration"
-	"github.com/thanhminhmr/go-common/errors"
+	"github.com/thanhminhmr/go-common/exception"
 	"github.com/thanhminhmr/go-common/log"
 	"go.uber.org/fx"
 
@@ -139,7 +139,7 @@ func (s *httpServer) log(next http.Handler) http.Handler {
 			if recovered := recover(); recovered != nil {
 				logger.Error().
 					Any("recovered", recovered).
-					Array("stack", errors.StackTrace(1)).
+					Array("stack", exception.StackTrace(1)).
 					Msg("Recovered from panic")
 				// response with 500 Internal Server Error
 				if request.Header.Get("Connection") != "Upgrade" {
