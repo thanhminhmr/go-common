@@ -1,5 +1,7 @@
 package exception
 
+var _ Exception = String("")
+
 // String is a string-based Exception. It behaves like a simple error containing
 // only a message, with no causes, suppressed errors, recovered value, or stack
 // trace.

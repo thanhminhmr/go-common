@@ -24,23 +24,22 @@ type StackFrames []StackFrame
 // and higher values skip more.
 func StackTrace(skip int) StackFrames {
 	// get stack trace
-	const depth = 32
+	const depth = 64
 	var programCounters [depth]uintptr
 	programCountersLength := runtime.Callers(2+skip, programCounters[:])
 	frames := runtime.CallersFrames(programCounters[:programCountersLength])
 	// create stack frames
-	var stack [depth]StackFrame
-	stackLength := 0
-	for ; stackLength < depth; stackLength++ {
-		frame, more := frames.Next()
-		if !more {
+	stack := make([]StackFrame, 0, programCountersLength)
+	for {
+		if frame, more := frames.Next(); more {
+			stack = append(stack, StackFrame{
+				Function: frame.Function,
+				File:     frame.File,
+				Line:     frame.Line,
+			})
+		} else {
 			break
 		}
-		stack[stackLength] = StackFrame{
-			Function: frame.Function,
-			File:     frame.File,
-			Line:     frame.Line,
-		}
 	}
-	return stack[:stackLength]
+	return stack
 }
