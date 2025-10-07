@@ -1,5 +1,7 @@
 package exception
 
+import "fmt"
+
 // Exception defines a lightweight exception model for Go, providing mechanisms
 // for chaining causes, tracking suppressed errors, storing recovered values, and
 // capturing stack traces.
@@ -8,7 +10,20 @@ package exception
 // or return a new exception instance. Callers should always use the returned
 // value and must not assume that the original exception remains unchanged.
 type Exception interface {
-	error
+	// Error returns a string representation of this Exception in the form of "Type: message"
+	Error() string
+
+	// GetType returns the type of this Exception.
+	GetType() string
+
+	// GetMessage returns the message of this Exception. Can be empty.
+	GetMessage() string
+
+	// SetMessage stores a message inside this Exception.
+	//
+	// Note: This method may modify the current Exception or return a new one. Always
+	// use the returned value.
+	SetMessage(message string, parameters ...any) Exception
 
 	// GetCause returns the list of underlying causes associated with this Exception.
 	// The slice may be empty if no causes have been specified.
@@ -63,7 +78,8 @@ type Exception interface {
 }
 
 type exception struct {
-	String     string
+	Type       string
+	Message    string
 	Cause      []error
 	Suppressed []error
 	Recovered  any
@@ -71,7 +87,27 @@ type exception struct {
 }
 
 func (e exception) Error() string {
-	return e.String
+	if e.Message != "" {
+		return e.Type + ":" + e.Message
+	}
+	return e.Type
+}
+
+func (e exception) GetType() string {
+	return e.Type
+}
+
+func (e exception) GetMessage() string {
+	return e.Message
+}
+
+func (e exception) SetMessage(message string, parameters ...any) Exception {
+	if len(parameters) > 0 {
+		e.Message = fmt.Sprintf(message, parameters...)
+	} else {
+		e.Message = message
+	}
+	return e
 }
 
 func (e exception) GetCause() []error {

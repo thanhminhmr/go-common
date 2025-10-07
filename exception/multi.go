@@ -1,5 +1,7 @@
 package exception
 
+import "fmt"
+
 // Join combines multiple errors into a single Exception.
 //
 // Nil values are ignored. If no errors remain, Join returns nil. If there is
@@ -26,10 +28,37 @@ func Join(errors ...error) Exception {
 	return multipleErrors(multiple)
 }
 
+// type check
+var _ Exception = multipleErrors(nil)
+
 type multipleErrors []error
 
 func (e multipleErrors) Error() string {
 	return ""
+}
+
+func (e multipleErrors) GetType() string {
+	return ""
+}
+
+func (e multipleErrors) GetMessage() string {
+	return ""
+}
+
+func (e multipleErrors) SetMessage(message string, parameters ...any) Exception {
+	if message == "" {
+		return e
+	}
+	if len(parameters) > 0 {
+		return exception{
+			Message: fmt.Sprintf(message, parameters...),
+			Cause:   e,
+		}
+	}
+	return exception{
+		Message: message,
+		Cause:   e,
+	}
 }
 
 func (e multipleErrors) GetCause() []error {

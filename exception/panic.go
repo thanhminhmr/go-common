@@ -29,9 +29,9 @@ const PanicError = String("panicked")
 //	    exception.Panic("bad state")
 //	}
 func Panic(recovered any) {
-	if err, ok := recovered.(Exception); !ok || err.Error() != string(PanicError) {
+	if err, ok := recovered.(Exception); !ok || err.GetType() != string(PanicError) {
 		recovered = exception{
-			String:     string(PanicError),
+			Type:       string(PanicError),
 			Recovered:  recovered,
 			StackTrace: StackTrace(1),
 		}
@@ -63,7 +63,7 @@ func Recover(recovered any) Exception {
 	if recovered == nil {
 		return nil
 	}
-	if err, ok := recovered.(Exception); ok && err.Error() == string(PanicError) {
+	if err, ok := recovered.(Exception); ok && err.GetType() == string(PanicError) {
 		return err
 	}
 	// skip to panic frame if exists
@@ -75,7 +75,7 @@ func Recover(recovered any) Exception {
 		}
 	}
 	return exception{
-		String:     string(PanicError),
+		Type:       string(PanicError),
 		Recovered:  recovered,
 		StackTrace: trace,
 	}

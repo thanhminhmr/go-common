@@ -1,5 +1,8 @@
 package exception
 
+import "fmt"
+
+// type check
 var _ Exception = String("")
 
 // String is a string-based Exception. It behaves like a simple error containing
@@ -22,6 +25,30 @@ func (e String) Error() string {
 	return string(e)
 }
 
+func (e String) GetType() string {
+	return string(e)
+}
+
+func (e String) GetMessage() string {
+	return ""
+}
+
+func (e String) SetMessage(message string, parameters ...any) Exception {
+	if message == "" {
+		return e
+	}
+	if len(parameters) > 0 {
+		return exception{
+			Type:    string(e),
+			Message: fmt.Sprintf(message, parameters...),
+		}
+	}
+	return exception{
+		Type:    string(e),
+		Message: message,
+	}
+}
+
 func (e String) GetCause() []error {
 	return nil
 }
@@ -30,8 +57,8 @@ func (e String) AddCause(errors ...error) Exception {
 	var cause []error
 	if combine(&cause, errors...) {
 		return exception{
-			String: string(e),
-			Cause:  cause,
+			Type:  string(e),
+			Cause: cause,
 		}
 	}
 	return e
@@ -45,7 +72,7 @@ func (e String) AddSuppressed(errors ...error) Exception {
 	var suppressed []error
 	if combine(&suppressed, errors...) {
 		return exception{
-			String:     string(e),
+			Type:       string(e),
 			Suppressed: suppressed,
 		}
 	}
@@ -61,7 +88,7 @@ func (e String) SetRecovered(recovered any) Exception {
 		return e
 	}
 	return exception{
-		String:    string(e),
+		Type:      string(e),
 		Recovered: recovered,
 	}
 }
@@ -72,7 +99,7 @@ func (e String) GetStackTrace() StackFrames {
 
 func (e String) FillStackTrace(skip int) Exception {
 	return exception{
-		String:     string(e),
+		Type:       string(e),
 		StackTrace: StackTrace(skip + 1),
 	}
 }

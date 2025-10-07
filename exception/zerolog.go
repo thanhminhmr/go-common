@@ -11,7 +11,10 @@ func (e String) MarshalZerologObject(event *zerolog.Event) {
 }
 
 func (e exception) MarshalZerologObject(event *zerolog.Event) {
-	event.Str("error", e.String)
+	event.Str("error", e.Type)
+	if e.Message != "" {
+		event.Str("message", e.Message)
+	}
 	switch len(e.Cause) {
 	case 0: // skip
 	case 1:

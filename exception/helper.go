@@ -2,14 +2,14 @@ package exception
 
 func is(source Exception, target error) bool {
 	if err, ok := target.(Exception); ok {
-		return source.Error() == err.Error()
+		return source.GetType() == err.GetType()
 	}
 	return false
 }
 
 func as(source Exception, target any) bool {
 	if err, ok := target.(*Exception); ok {
-		if source.Error() == (*err).Error() {
+		if source.GetType() == (*err).GetType() {
 			*err = source
 			return true
 		}
