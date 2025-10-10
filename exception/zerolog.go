@@ -6,11 +6,12 @@ import (
 	"github.com/rs/zerolog"
 )
 
+// MarshalZerologObject marshall this [Exception] as a zerolog object.
 func (e String) MarshalZerologObject(event *zerolog.Event) {
 	event.Str("error", string(e))
 }
 
-func (e exception) MarshalZerologObject(event *zerolog.Event) {
+func (e fullException) MarshalZerologObject(event *zerolog.Event) {
 	event.Str("error", e.Type)
 	if e.Message != "" {
 		event.Str("message", e.Message)
@@ -47,10 +48,12 @@ func (e multipleErrors) MarshalZerologObject(event *zerolog.Event) {
 	}
 }
 
+// MarshalZerologObject marshall this [StackFrame] as a zerolog object.
 func (f StackFrame) MarshalZerologObject(event *zerolog.Event) {
 	event.Str("function", f.Function).Str("file", f.File).Int("line", f.Line)
 }
 
+// MarshalZerologArray marshall this [StackFrames] as a zerolog array.
 func (s StackFrames) MarshalZerologArray(array *zerolog.Array) {
 	for _, frame := range s {
 		array.Object(frame)

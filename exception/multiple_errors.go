@@ -2,17 +2,17 @@ package exception
 
 import "fmt"
 
-// Join combines multiple errors into a single Exception.
+// Join combines multiple errors into a single [Exception].
 //
-// Nil values are ignored. If no errors remain, Join returns nil. If there is
-// exactly one non-nil error, and it already implements Exception, it is returned
-// directly.
+// Nil values are ignored. If no errors remain, [Join] returns nil. If there is
+// exactly one non-nil error, and it already implements [Exception], it is
+// returned directly.
 //
-// Otherwise, Join creates a new Exception that represents multiple causes. This
-// special Exception only holds the underlying errors; other details such as
-// suppressed errors, recovered value, and stack trace are left empty.
+// Otherwise, [Join] creates a new [Exception] that represents multiple causes.
+// This special [Exception] only holds the underlying errors; other details such
+// as suppressed errors, recovered value, and stack trace are left empty.
 //
-// Note: The returned Exception may reuse or wrap the given errors. Callers
+// Note: The returned [Exception] may reuse or wrap the given errors. Callers
 // should always use the returned value rather than assuming the original inputs
 // remain unchanged.
 func Join(errors ...error) Exception {
@@ -29,7 +29,7 @@ func Join(errors ...error) Exception {
 }
 
 // type check
-var _ Exception = multipleErrors(nil)
+var _ Exception = multipleErrors{}
 
 type multipleErrors []error
 
@@ -50,12 +50,12 @@ func (e multipleErrors) SetMessage(message string, parameters ...any) Exception 
 		return e
 	}
 	if len(parameters) > 0 {
-		return exception{
+		return fullException{
 			Message: fmt.Sprintf(message, parameters...),
 			Cause:   e,
 		}
 	}
-	return exception{
+	return fullException{
 		Message: message,
 		Cause:   e,
 	}
@@ -77,7 +77,7 @@ func (e multipleErrors) GetSuppressed() []error {
 func (e multipleErrors) AddSuppressed(errors ...error) Exception {
 	var suppressed []error
 	if combine(&suppressed, errors...) {
-		return exception{
+		return fullException{
 			Cause:      e,
 			Suppressed: suppressed,
 		}
@@ -93,7 +93,7 @@ func (e multipleErrors) SetRecovered(recovered any) Exception {
 	if recovered == nil {
 		return e
 	}
-	return exception{
+	return fullException{
 		Cause:     e,
 		Recovered: recovered,
 	}
@@ -104,7 +104,7 @@ func (e multipleErrors) GetStackTrace() StackFrames {
 }
 
 func (e multipleErrors) FillStackTrace(skip int) Exception {
-	return exception{
+	return fullException{
 		Cause:      e,
 		StackTrace: StackTrace(skip + 1),
 	}
