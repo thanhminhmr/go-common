@@ -4,12 +4,11 @@ import (
 	"context"
 	"net/url"
 
-	"github.com/thanhminhmr/go-common/exception"
-	"go.uber.org/fx"
-
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/tracelog"
 	"github.com/rs/zerolog"
+	"github.com/thanhminhmr/go-exception"
+	"go.uber.org/fx"
 )
 
 // New connects to the PostgreSQL database that are specified in

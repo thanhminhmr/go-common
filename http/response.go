@@ -11,6 +11,12 @@ type ServerResponse interface {
 	Render(writer http.ResponseWriter) error
 }
 
+type ServerResponseFunc func(writer http.ResponseWriter) error
+
+func (fn ServerResponseFunc) Render(writer http.ResponseWriter) error {
+	return fn(writer)
+}
+
 type ServerErrorResponse struct {
 	Status int
 	Cause  error

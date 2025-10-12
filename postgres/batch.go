@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync/atomic"
 
-	"github.com/thanhminhmr/go-common/exception"
+	"github.com/thanhminhmr/go-exception"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -40,25 +40,25 @@ func (b *_batch) Query(collector RowCollector, handler CommandTagHandler, sql st
 		panic("BUG: collector is nil")
 	}
 	b.batch.Queue(sql, args...).Query(func(rows pgx.Rows) (errorResult error) {
-		var errorChain exception.Exception
+		var ex exception.Exception
 		defer func() {
 			rows.Close()
 			if err := rows.Err(); err != nil {
-				if errorChain != nil {
-					errorChain = errorChain.AddSuppressed(err)
+				if ex != nil {
+					ex = ex.AddSuppressed(err)
 				} else {
-					errorChain = exception.String("Query in batch failed").AddCause(err)
+					ex = exception.String("Query in batch failed").AddCause(err)
 				}
-			} else if errorChain == nil && handler != nil {
+			} else if ex == nil && handler != nil {
 				if err := handler(b.ctx, rows.CommandTag()); err != nil {
-					errorChain = exception.String("Query in batch failed").AddCause(err)
+					ex = exception.String("Query in batch failed").AddCause(err)
 				}
 			}
-			errorResult = errorChain
+			errorResult = ex
 		}()
 		for rows.Next() {
 			if err := collector(b.ctx, rows.Scan); err != nil {
-				errorChain = exception.String("Query in batch failed").AddCause(err)
+				ex = exception.String("Query in batch failed").AddCause(err)
 				return
 			}
 		}
@@ -71,28 +71,28 @@ func (b *_batch) QueryRow(collector RowCollector, sql string, args ...any) {
 		panic("BUG: collector is nil")
 	}
 	b.batch.Queue(sql, args...).Query(func(rows pgx.Rows) (errorResult error) {
-		var exception exception.Exception
+		var ex exception.Exception
 		defer func() {
 			rows.Close()
 			if err := rows.Err(); err != nil {
-				if exception != nil {
-					exception = exception.AddSuppressed(err)
+				if ex != nil {
+					ex = ex.AddSuppressed(err)
 				} else {
-					exception = exception.String("QueryRow in batch failed").AddCause(err)
+					ex = exception.String("QueryRow in batch failed").AddCause(err)
 				}
 			}
-			errorResult = exception
+			errorResult = ex
 		}()
 		if !rows.Next() {
-			exception = exception.String("QueryRow in batch failed: no rows returned")
+			ex = exception.String("QueryRow in batch failed: no rows returned")
 			return
 		}
 		if err := collector(b.ctx, rows.Scan); err != nil {
-			exception = exception.String("QueryRow in batch failed").AddCause(err)
+			ex = exception.String("QueryRow in batch failed").AddCause(err)
 			return
 		}
 		if rows.Next() {
-			exception = exception.String("QueryRow in batch failed: more than one row returned")
+			ex = exception.String("QueryRow in batch failed: more than one row returned")
 			return
 		}
 		return

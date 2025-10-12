@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync/atomic"
 
-	"github.com/thanhminhmr/go-common/exception"
+	"github.com/thanhminhmr/go-exception"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -90,23 +90,23 @@ func (c _connection[pgxConnection]) Query(
 	if rows, err := c.pgx.Query(ctx, sql, args...); err != nil {
 		return nil, exception.String("Query failed").AddCause(err)
 	} else {
-		var errorChain exception.Exception
+		var ex exception.Exception
 		defer func() {
 			rows.Close()
 			if err := rows.Err(); err != nil {
-				if errorChain != nil {
-					errorChain = errorChain.AddSuppressed(err)
+				if ex != nil {
+					ex = ex.AddSuppressed(err)
 				} else {
-					errorChain = exception.String("Query failed").AddCause(err)
+					ex = exception.String("Query failed").AddCause(err)
 				}
-			} else if errorChain == nil {
+			} else if ex == nil {
 				tag = rows.CommandTag()
 			}
-			errorResult = errorChain
+			errorResult = ex
 		}()
 		for rows.Next() {
 			if err := collector(ctx, rows.Scan); err != nil {
-				errorChain = exception.String("Query failed").AddCause(err)
+				ex = exception.String("Query failed").AddCause(err)
 				return
 			}
 		}
@@ -122,24 +122,24 @@ func (c _connection[pgxConnection]) QueryRow(ctx context.Context, sql string, ar
 			return nil, exception.String("QueryRow failed: no rows returned")
 		}
 		return func(destination ...any) (errorResult error) {
-			var errorChain exception.Exception
+			var ex exception.Exception
 			defer func() {
 				rows.Close()
 				if err := rows.Err(); err != nil {
-					if errorChain != nil {
-						errorChain = errorChain.AddSuppressed(err)
+					if ex != nil {
+						ex = ex.AddSuppressed(err)
 					} else {
-						errorChain = exception.String("QueryRow failed").AddCause(err)
+						ex = exception.String("QueryRow failed").AddCause(err)
 					}
 				}
-				errorResult = errorChain
+				errorResult = ex
 			}()
 			if err := rows.Scan(destination...); err != nil {
-				errorChain = exception.String("QueryRow failed").AddCause(err)
+				ex = exception.String("QueryRow failed").AddCause(err)
 				return
 			}
 			if rows.Next() {
-				errorChain = exception.String("QueryRow failed: more than one row returned")
+				ex = exception.String("QueryRow failed: more than one row returned")
 				return
 			}
 			return

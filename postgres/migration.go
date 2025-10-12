@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/thanhminhmr/go-common/exception"
+	"github.com/thanhminhmr/go-exception"
 )
 
 type MigrationPlan []MigrationRecord
@@ -16,7 +16,7 @@ type MigrationRecord struct {
 
 // language=PostgreSQL
 const migrationCreateTable = `
-CREATE TABLE IF NOT EXISTS _migrations_ (
+CREATE TABLE if NOT EXISTS _migrations_ (
 	id CHARACTER VARYING(31) COLLATE "C.utf8" NOT NULL,
 	applied_at TIMESTAMP WITH TIME ZONE NOT NULL,
 	CONSTRAINT _migrations_pk PRIMARY KEY (id)

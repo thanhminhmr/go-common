@@ -2,6 +2,7 @@ package http
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/rand/v2"
 	"net/http"
@@ -9,8 +10,8 @@ import (
 	"time"
 
 	"github.com/thanhminhmr/go-common/configuration"
-	"github.com/thanhminhmr/go-common/exception"
 	"github.com/thanhminhmr/go-common/log"
+	"github.com/thanhminhmr/go-exception"
 	"go.uber.org/fx"
 
 	"github.com/go-chi/chi/v5"
@@ -88,7 +89,7 @@ func (s *httpServer) onStart(_ context.Context) error {
 
 func (s *httpServer) serve() {
 	s.logger.Info().Str("addr", s.server.Addr).Msgf("Start serving")
-	if err := s.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+	if err := s.server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		s.logger.Error().Err(err).Msg("Shutdown with error")
 	}
 }

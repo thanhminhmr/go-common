@@ -12,8 +12,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/thanhminhmr/go-common/exception"
 	"github.com/thanhminhmr/go-common/internal"
+	"github.com/thanhminhmr/go-exception"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"

@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/thanhminhmr/go-common/exception"
+	"github.com/thanhminhmr/go-exception"
 )
 
 type Transaction interface {
@@ -28,36 +28,36 @@ func (t _transaction) Finalize(ctx context.Context, errorResult *error) {
 		panic("BUG: errorResult is nil")
 	}
 	var recovered any
-	var errorChain exception.Exception
+	var ex exception.Exception
 	// check for commit condition and try to commit
 	if *errorResult != nil {
 		// transaction rollback on error
 	} else if recovered = recover(); recovered != nil {
 		// transaction rollback on panic without changing anything
 	} else if err := ctx.Err(); err != nil {
-		errorChain = exception.String("transaction rollback on context error").AddCause(err)
+		ex = exception.String("transaction rollback on context error").AddCause(err)
 	} else if err := t.pgx.Commit(ctx); err != nil {
-		errorChain = exception.String("transaction rollback on commit error").AddCause(err)
+		ex = exception.String("transaction rollback on commit error").AddCause(err)
 	} else {
 		return
 	}
 	// either commit condition failed or commit failed, try rolling back
 	if err := t.pgx.Rollback(ctx); err != nil && recovered == nil {
-		if errorChain == nil {
+		if ex == nil {
 			// only wrap the error if needed
 			var ok bool
-			if errorChain, ok = (*errorResult).(exception.Exception); !ok {
-				errorChain = exception.String("transaction rollback on error").AddCause(*errorResult)
+			if ex, ok = (*errorResult).(exception.Exception); !ok {
+				ex = exception.String("transaction rollback on error").AddCause(*errorResult)
 			}
 		}
-		errorChain = errorChain.AddSuppressed(exception.String("transaction rollback failed").AddCause(err))
+		ex = ex.AddSuppressed(exception.String("transaction rollback failed").AddCause(err))
 	}
 	// if recovered from panic, re-panic as it
 	if recovered != nil {
 		panic(recovered)
 	}
 	// if error got wrapped, return the wrapped error
-	if errorChain != nil {
-		*errorResult = errorChain
+	if ex != nil {
+		*errorResult = ex
 	}
 }
