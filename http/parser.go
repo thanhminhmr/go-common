@@ -13,12 +13,12 @@ import (
 	"strings"
 
 	"github.com/thanhminhmr/go-common/internal"
-	"github.com/thanhminhmr/go-exception"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
 	"github.com/go-viper/mapstructure/v2"
 	"github.com/rs/zerolog"
+	"github.com/thanhminhmr/go-exception"
 )
 
 type ServerRequestHandler[ServerRequest any] func(ctx context.Context, request *ServerRequest) ServerResponse

@@ -26,7 +26,7 @@ func (f _func) String() string {
 	}
 	v := reflect.ValueOf(f.v)
 	if v.Kind() != reflect.Func {
-		return "<unknown>"
+		return "<invalid>"
 	}
 	funcForPC := runtime.FuncForPC(v.Pointer())
 	if funcForPC == nil {

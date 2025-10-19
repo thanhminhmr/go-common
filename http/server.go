@@ -11,12 +11,12 @@ import (
 
 	"github.com/thanhminhmr/go-common/configuration"
 	"github.com/thanhminhmr/go-common/log"
-	"github.com/thanhminhmr/go-exception"
-	"go.uber.org/fx"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/rs/zerolog"
+	"github.com/thanhminhmr/go-exception"
+	"go.uber.org/fx"
 )
 
 type ServerConfig struct {
