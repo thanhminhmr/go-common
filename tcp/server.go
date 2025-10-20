@@ -7,13 +7,15 @@ import (
 	"net"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/rs/zerolog"
 	"go.uber.org/fx"
 )
 
 type ServerConfig struct {
-	Port uint16 `env:"TCP_SERVER_PORT" validate:"required"`
+	Port            uint16 `env:"TCP_SERVER_PORT" validate:"required"`
+	ShutdownTimeout uint   `env:"TCP_SERVER_SHUTDOWN_TIMEOUT" validate:"required,max=10"`
 }
 
 type ServerHandler interface {
@@ -149,7 +151,8 @@ func (s *tcpServer) onStop(ctx context.Context) error {
 	select {
 	case <-s.ctx.Done():
 	case <-ctx.Done():
-		s.cancel()
+	case <-time.After(time.Duration(s.config.ShutdownTimeout) * time.Second):
 	}
+	s.cancel()
 	return nil
 }
