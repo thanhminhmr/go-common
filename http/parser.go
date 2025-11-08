@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/thanhminhmr/go-common/internal"
+	"github.com/thanhminhmr/go-common/log"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
@@ -50,7 +51,7 @@ func serverRequestHandler(
 	}
 	logger.Trace().Any("request", parsed).Msg("Request parsed")
 	if renderer := handler(); renderer != nil {
-		logger.Trace().Any("response", renderer).Msg("Response returned")
+		log.FuncOrAny(logger.Trace(), "response", renderer).Msg("Response returned")
 		if err := renderer.Render(writer); err != nil {
 			logger.Error().Err(err).Msg("Failed to render response")
 		}

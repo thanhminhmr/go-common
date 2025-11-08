@@ -137,10 +137,9 @@ func (s *httpServer) log(next http.Handler) http.Handler {
 		}(start, wrappedWriter)
 		// recover any panic
 		defer func() {
-			if recovered := recover(); recovered != nil {
+			if recovered := exception.Recover(recover()); recovered != nil {
 				logger.Error().
-					Any("recovered", recovered).
-					Array("stack", exception.StackTrace(1)).
+					Err(recovered).
 					Msg("Recovered from panic")
 				// response with 500 Internal Server Error
 				if request.Header.Get("Connection") != "Upgrade" {
