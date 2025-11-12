@@ -23,6 +23,13 @@ type _transaction struct {
 	_connection[pgx.Tx]
 }
 
+const (
+	errorRollbackContext = exception.String("Postgres: Finalize failed, transaction rollback on context error")
+	errorRollbackCommit  = exception.String("Postgres: Finalize failed, transaction rollback on commit error")
+	errorRollback        = exception.String("Postgres: Finalize failed, transaction rollback on error")
+	errorRollbackFailed  = exception.String("Postgres: Finalize failed, transaction rollback also failed")
+)
+
 func (t _transaction) Finalize(ctx context.Context, errorResult *error) {
 	if errorResult == nil {
 		panic("BUG: errorResult is nil")
@@ -35,9 +42,9 @@ func (t _transaction) Finalize(ctx context.Context, errorResult *error) {
 	} else if recovered = recover(); recovered != nil {
 		// transaction rollback on panic without changing anything
 	} else if err := ctx.Err(); err != nil {
-		ex = exception.String("transaction rollback on context error").AddCause(err)
+		ex = errorRollbackContext.AddCause(err)
 	} else if err := t.pgx.Commit(ctx); err != nil {
-		ex = exception.String("transaction rollback on commit error").AddCause(err)
+		ex = errorRollbackCommit.AddCause(err)
 	} else {
 		return
 	}
@@ -47,10 +54,10 @@ func (t _transaction) Finalize(ctx context.Context, errorResult *error) {
 			// only wrap the error if needed
 			var ok bool
 			if ex, ok = (*errorResult).(exception.Exception); !ok {
-				ex = exception.String("transaction rollback on error").AddCause(*errorResult)
+				ex = errorRollback.AddCause(*errorResult)
 			}
 		}
-		ex = ex.AddSuppressed(exception.String("transaction rollback failed").AddCause(err))
+		ex = ex.AddSuppressed(errorRollbackFailed.AddCause(err))
 	}
 	// if recovered from panic, re-panic as it
 	if recovered != nil {

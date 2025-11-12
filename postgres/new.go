@@ -3,12 +3,19 @@ package postgres
 import (
 	"context"
 	"net/url"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/tracelog"
 	"github.com/rs/zerolog"
 	"github.com/thanhminhmr/go-exception"
 	"go.uber.org/fx"
+)
+
+const (
+	errorConfig  = exception.String("Postgres: Failed parsing config")
+	errorConnect = exception.String("Postgres: Failed to connect to database")
+	errorMigrate = exception.String("Postgres: Failed to migrate database")
 )
 
 // New connects to the PostgreSQL database that are specified in
@@ -21,23 +28,35 @@ func New(
 	// parse configuration
 	parsedConfig, err := parseConfig(config)
 	if err != nil {
-		return nil, exception.String("Failed parsing config").AddCause(err)
+		return nil, errorConfig.AddCause(err)
 	}
 	// try connect
 	pool, err := pgxpool.NewWithConfig(context.Background(), parsedConfig)
 	if err != nil {
-		return nil, exception.String("Failed to connect to database").AddCause(err)
+		return nil, errorConnect.AddCause(err)
 	}
 	// create database
 	database := &_database{_connection: _connection[*pgxpool.Pool]{pgx: pool}}
 	// migrate database
-	if plan != nil {
-		if err := plan.migrate(context.Background(), database); err != nil {
+	if len(plan) > 0 {
+		// set timeout if any
+		var err error
+		if config.MigrationTimeout > 0 {
+			err = func() error {
+				timeout := time.Duration(config.MigrationTimeout) * time.Second
+				ctx, cancel := context.WithTimeout(context.Background(), timeout)
+				defer cancel()
+				return plan.migrate(ctx, database)
+			}()
+		} else {
+			err = plan.migrate(context.Background(), database)
+		}
+		if err != nil {
 			database.close()
-			return nil, exception.String("Failed to migrate database").AddCause(err)
+			return nil, errorMigrate.AddCause(err)
 		}
 	}
-	// add on stop hook
+	// add on start and on stop hook
 	lifecycle.Append(fx.Hook{
 		OnStop: func(ctx context.Context) error {
 			database.close()

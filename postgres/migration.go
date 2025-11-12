@@ -28,6 +28,8 @@ const migrationSelectIds = `SELECT id FROM _migrations_`
 // language=PostgreSQL
 const migrationCreateRecord = `INSERT INTO _migrations_ (id, applied_at) VALUES ($1, $2)`
 
+const errorMigrationRecord = exception.String("Postgres: Failed to create migration record")
+
 func (migrationPlan MigrationPlan) migrate(ctx context.Context, database Database) error {
 	// create migration table
 	if _, err := database.Exec(ctx, migrationCreateTable); err != nil {
@@ -79,7 +81,7 @@ func (migrationRecord MigrationRecord) migrate(ctx context.Context, database Dat
 		return err
 	}
 	if tag.RowsAffected() != 1 {
-		return exception.String("Failed to create migration record")
+		return errorMigrationRecord
 	}
 	// success
 	return nil

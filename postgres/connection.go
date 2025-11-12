@@ -50,6 +50,15 @@ type _connection[pgxConnection _pgxConnection] struct {
 	pgx pgxConnection
 }
 
+const (
+	errorBegin         = exception.String("Postgres: Begin transaction failed")
+	errorExec          = exception.String("Postgres: Exec failed")
+	errorQuery         = exception.String("Postgres: Query failed")
+	errorQueryRow      = exception.String("Postgres: QueryRow failed")
+	errorQueryRowEmpty = exception.String("Postgres: QueryRow failed, no rows returned")
+	errorQueryRowMany  = exception.String("Postgres: QueryRow failed, more thanh one row returned")
+)
+
 func (c _connection[pgxConnection]) Begin(ctx context.Context) (Transaction, error) {
 	if tx, err := c.pgx.Begin(ctx); err == nil {
 		return &_transaction{
@@ -58,7 +67,7 @@ func (c _connection[pgxConnection]) Begin(ctx context.Context) (Transaction, err
 			},
 		}, nil
 	} else {
-		return nil, exception.String("Begin transaction failed").AddCause(err)
+		return nil, errorBegin.AddCause(err)
 	}
 }
 
@@ -72,7 +81,7 @@ func (c _connection[pgxConnection]) Batch(ctx context.Context) Batch {
 
 func (c _connection[pgxConnection]) Exec(ctx context.Context, sql string, args ...any) (CommandTag, error) {
 	if tag, err := c.pgx.Exec(ctx, sql, args...); err != nil {
-		return nil, exception.String("Exec failed").AddCause(err)
+		return nil, errorExec.AddCause(err)
 	} else {
 		return &tag, nil
 	}
@@ -88,7 +97,7 @@ func (c _connection[pgxConnection]) Query(
 		panic("BUG: collector is nil")
 	}
 	if rows, err := c.pgx.Query(ctx, sql, args...); err != nil {
-		return nil, exception.String("Query failed").AddCause(err)
+		return nil, errorQuery.AddCause(err)
 	} else {
 		var ex exception.Exception
 		defer func() {
@@ -97,7 +106,7 @@ func (c _connection[pgxConnection]) Query(
 				if ex != nil {
 					ex = ex.AddSuppressed(err)
 				} else {
-					ex = exception.String("Query failed").AddCause(err)
+					ex = errorQuery.AddCause(err)
 				}
 			} else if ex == nil {
 				tag = rows.CommandTag()
@@ -106,7 +115,7 @@ func (c _connection[pgxConnection]) Query(
 		}()
 		for rows.Next() {
 			if err := collector(ctx, rows.Scan); err != nil {
-				ex = exception.String("Query failed").AddCause(err)
+				ex = errorQuery.AddCause(err)
 				return
 			}
 		}
@@ -116,10 +125,10 @@ func (c _connection[pgxConnection]) Query(
 
 func (c _connection[pgxConnection]) QueryRow(ctx context.Context, sql string, args ...any) (RowScanner, error) {
 	if rows, err := c.pgx.Query(ctx, sql, args...); err != nil {
-		return nil, exception.String("QueryRow failed").AddCause(err)
+		return nil, errorQueryRow.AddCause(err)
 	} else {
 		if !rows.Next() {
-			return nil, exception.String("QueryRow failed: no rows returned")
+			return nil, errorQueryRowEmpty
 		}
 		return func(destination ...any) (errorResult error) {
 			var ex exception.Exception
@@ -129,17 +138,17 @@ func (c _connection[pgxConnection]) QueryRow(ctx context.Context, sql string, ar
 					if ex != nil {
 						ex = ex.AddSuppressed(err)
 					} else {
-						ex = exception.String("QueryRow failed").AddCause(err)
+						ex = errorQueryRow.AddCause(err)
 					}
 				}
 				errorResult = ex
 			}()
 			if err := rows.Scan(destination...); err != nil {
-				ex = exception.String("QueryRow failed").AddCause(err)
+				ex = errorQueryRow.AddCause(err)
 				return
 			}
 			if rows.Next() {
-				ex = exception.String("QueryRow failed: more than one row returned")
+				ex = errorQueryRowMany
 				return
 			}
 			return
@@ -158,81 +167,4 @@ func (c _connection[pgxConnection]) internalCopyFrom(
 	source pgx.CopyFromSource,
 ) (int64, error) {
 	return c.pgx.CopyFrom(ctx, pgx.Identifier{tableName}, columnNames, source)
-}
-
-// ========================================
-
-func CopyAll[T any](
-	connection Connection,
-	ctx context.Context,
-	tableName string,
-	columnNames []string,
-	input []T,
-	outputMapper SliceMapper[T],
-) (errorResult error) {
-	// create transaction
-	transaction, err := connection.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer transaction.Finalize(ctx, &errorResult)
-	// create source
-	source := &fromSlice[T]{
-		mapper: outputMapper,
-		input:  input,
-		output: make([]any, len(columnNames)),
-		index:  -1,
-	}
-	// call raw copy and check the result
-	if count, err := transaction.internalCopyFrom(ctx, tableName, columnNames, source); err != nil {
-		return exception.String("CopyAll failed").AddCause(err)
-	} else if count != int64(len(input)) {
-		return exception.String("CopyAll failed: cannot copy all from source")
-	}
-	return nil
-}
-
-func CopyAny[T any](
-	connection Connection,
-	ctx context.Context,
-	tableName string,
-	columnNames []string,
-	input []T,
-	outputMapper SliceMapper[T],
-) (int64, error) {
-	source := &fromSlice[T]{
-		mapper: outputMapper,
-		input:  input,
-		output: make([]any, len(columnNames)),
-		index:  -1,
-	}
-	count, err := connection.internalCopyFrom(ctx, tableName, columnNames, source)
-	if err != nil {
-		return count, exception.String("CopyAny failed").AddCause(err)
-	}
-	return count, nil
-}
-
-type SliceMapper[T any] func(output []any, input T)
-
-type fromSlice[T any] struct {
-	mapper SliceMapper[T]
-	input  []T
-	output []any
-	index  int
-}
-
-func (copy *fromSlice[T]) Next() bool {
-	copy.index++
-	return copy.index < len(copy.input)
-}
-
-func (copy *fromSlice[T]) Values() ([]any, error) {
-	clear(copy.output)
-	copy.mapper(copy.output, copy.input[copy.index])
-	return copy.output, nil
-}
-
-func (copy *fromSlice[T]) Err() error {
-	return nil
 }
