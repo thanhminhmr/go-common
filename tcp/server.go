@@ -16,6 +16,7 @@ import (
 type ServerConfig struct {
 	Port            uint16 `env:"TCP_SERVER_PORT" validate:"required"`
 	ShutdownTimeout uint   `env:"TCP_SERVER_SHUTDOWN_TIMEOUT" validate:"required,max=10"`
+	ConnectionLog   bool   `env:"TCP_SERVER_CONNECTION_LOG"`
 }
 
 type ServerHandler interface {
@@ -116,20 +117,24 @@ func (s *tcpServer) worker() {
 func (s *tcpServer) execute(connection *net.TCPConn) {
 	s.waitGroup.Add(1)
 	logger := s.logger.With().Str("connection_id", fmt.Sprintf("%016x", rand.Uint64())).Logger()
-	logger.Info().
-		Stringer("remote_address", connection.RemoteAddr()).
-		Stringer("local_address", connection.LocalAddr()).
-		Msg("Start handling connection")
+	if s.config.ConnectionLog {
+		logger.Trace().
+			Stringer("remote_address", connection.RemoteAddr()).
+			Stringer("local_address", connection.LocalAddr()).
+			Msg("Start handling connection")
+	}
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			logger.Error().Any("recovered", recovered).Msg("Panic while handling connection")
 		}
 		s.waitGroup.Done()
 		<-s.semaphore
-		logger.Info().
-			Stringer("remote_address", connection.RemoteAddr()).
-			Stringer("local_address", connection.LocalAddr()).
-			Msg("Finish handling connection")
+		if s.config.ConnectionLog {
+			logger.Trace().
+				Stringer("remote_address", connection.RemoteAddr()).
+				Stringer("local_address", connection.LocalAddr()).
+				Msg("Finish handling connection")
+		}
 	}()
 	defer func() {
 		if err := connection.Close(); err != nil {

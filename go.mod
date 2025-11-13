@@ -8,7 +8,7 @@ require (
 	github.com/go-viper/mapstructure/v2 v2.4.0
 	github.com/jackc/pgx/v5 v5.7.6
 	github.com/rs/zerolog v1.34.0
-	github.com/thanhminhmr/go-exception v0.0.4
+	github.com/thanhminhmr/go-exception v0.0.5
 	go.uber.org/dig v1.19.0
 	go.uber.org/fx v1.24.0
 )
