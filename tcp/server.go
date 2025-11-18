@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
+	"github.com/thanhminhmr/go-exception"
 	"go.uber.org/fx"
 )
 
@@ -124,7 +125,7 @@ func (s *tcpServer) execute(connection *net.TCPConn) {
 			Msg("Start handling connection")
 	}
 	defer func() {
-		if recovered := recover(); recovered != nil {
+		if recovered := exception.Recover(recover()); recovered != nil {
 			logger.Error().Any("recovered", recovered).Msg("Panic while handling connection")
 		}
 		s.waitGroup.Done()
