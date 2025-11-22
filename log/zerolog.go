@@ -12,11 +12,13 @@ func init() {
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnixNano
 }
 
-func ConsoleLogger(lifecycle fx.Lifecycle) (*zerolog.Logger, context.Context) {
+const timeFormat = "2006-01-02T15:04:05.000000000Z07:00"
+
+func ConsoleLogger(lifecycle fx.Lifecycle) context.Context {
 	// create the logger
 	logger := zerolog.New(zerolog.ConsoleWriter{
 		Out:        os.Stderr,
-		TimeFormat: "2006-01-02T15:04:05.000000000Z07:00",
+		TimeFormat: timeFormat,
 	}).With().Timestamp().Caller().Logger()
 	// create the global context with lifecycle cancel binding and the logger
 	ctx, cancel := context.WithCancel(logger.WithContext(context.Background()))
@@ -26,5 +28,5 @@ func ConsoleLogger(lifecycle fx.Lifecycle) (*zerolog.Logger, context.Context) {
 			return nil
 		},
 	})
-	return zerolog.Ctx(ctx), ctx
+	return ctx
 }

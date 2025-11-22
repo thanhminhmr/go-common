@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"math/rand/v2"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/thanhminhmr/go-common/configuration"
@@ -20,13 +19,11 @@ import (
 )
 
 type ServerConfig struct {
-	Port uint16 `env:"HTTP_SERVER_PORT" validate:"required"`
-}
-
-type ServerExtraConfig struct {
+	Port              uint16 `env:"HTTP_SERVER_PORT" validate:"required"`
 	ReadHeaderTimeout uint32 `env:"HTTP_SERVER_READ_HEADER_TIMEOUT" validate:"min=0,max=60"`
 	IdleTimeout       uint32 `env:"HTTP_SERVER_IDLE_TIMEOUT" validate:"min=0,max=3600"`
 	MaxHeaderBytes    uint32 `env:"HTTP_SERVER_MAX_HEADER_BYTES" validate:"min=0,max=65536"`
+	ShutdownOnError   bool   `env:"HTTP_SERVER_SHUTDOWN_ON_ERROR"`
 }
 
 func init() {
@@ -36,23 +33,22 @@ func init() {
 }
 
 func NewServer(
-	logger *zerolog.Logger,
+	ctx context.Context,
 	lifecycle fx.Lifecycle,
 	config *ServerConfig,
-	extraConfig *ServerExtraConfig,
 ) chi.Router {
 	// create route
 	router := chi.NewRouter()
 	// create the http server
 	server := httpServer{
-		logger: logger,
+		logger: zerolog.Ctx(ctx),
 		router: router,
 		server: http.Server{
-			Addr:              ":" + strconv.FormatUint(uint64(config.Port), 10),
+			Addr:              fmt.Sprintf(":%d", config.Port),
 			Handler:           router,
-			ReadHeaderTimeout: time.Duration(extraConfig.ReadHeaderTimeout) * time.Second,
-			IdleTimeout:       time.Duration(extraConfig.IdleTimeout) * time.Second,
-			MaxHeaderBytes:    int(extraConfig.MaxHeaderBytes),
+			ReadHeaderTimeout: time.Duration(config.ReadHeaderTimeout) * time.Second,
+			IdleTimeout:       time.Duration(config.IdleTimeout) * time.Second,
+			MaxHeaderBytes:    int(config.MaxHeaderBytes),
 		},
 	}
 	// set a sane default middleware stack
@@ -74,7 +70,7 @@ type httpServer struct {
 	server http.Server
 }
 
-func (s *httpServer) onStart(_ context.Context) error {
+func (s *httpServer) onStart(context.Context) error {
 	// dump all routes
 	s.logger.Info().Msg("Listing all routes...")
 	if err := chi.Walk(s.router, s.dumpRoutes); err != nil {
@@ -138,9 +134,7 @@ func (s *httpServer) log(next http.Handler) http.Handler {
 		// recover any panic
 		defer func() {
 			if recovered := exception.Recover(recover()); recovered != nil {
-				logger.Error().
-					Err(recovered).
-					Msg("Recovered from panic")
+				logger.Error().Err(recovered).Msg("Recovered from panic")
 				// response with 500 Internal Server Error
 				if request.Header.Get("Connection") != "Upgrade" {
 					wrappedWriter.WriteHeader(http.StatusInternalServerError)

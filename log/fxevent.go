@@ -1,6 +1,8 @@
 package log
 
 import (
+	"context"
+
 	"github.com/rs/zerolog"
 	"go.uber.org/dig"
 	"go.uber.org/fx/fxevent"
@@ -12,8 +14,8 @@ type fxLogger struct {
 }
 
 // InitFxLogger returns the logger instance for Zerolog.
-func InitFxLogger(logger *zerolog.Logger) fxevent.Logger {
-	return fxLogger{Logger: logger}
+func InitFxLogger(ctx context.Context) fxevent.Logger {
+	return fxLogger{Logger: zerolog.Ctx(ctx)}
 }
 
 type moduleName string
