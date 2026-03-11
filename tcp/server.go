@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package tcp
 
 import (
@@ -62,6 +68,7 @@ type tcpServer struct {
 func (s *tcpServer) onStart(context.Context) error {
 	logger := zerolog.Ctx(s.ctx)
 	// create listener
+	//goland:noinspection GoResourceLeak
 	listener, err := net.ListenTCP("tcp", &net.TCPAddr{Port: int(s.config.Port)})
 	if err != nil {
 		logger.Error().Err(err).Uint16("port", s.config.Port).Msg("Failed to listen")
