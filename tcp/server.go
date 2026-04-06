@@ -15,14 +15,20 @@ import (
 	"sync/atomic"
 
 	"github.com/rs/zerolog"
+	"github.com/thanhminhmr/go-common/configuration"
 	"github.com/thanhminhmr/go-exception"
 	"go.uber.org/fx"
 )
 
 type ServerConfig struct {
-	Port               uint16 `env:"TCP_SERVER_PORT" validate:"required"`
-	ShutdownOnError    bool   `env:"TCP_SERVER_SHUTDOWN_ON_ERROR"`
-	TracePerConnection bool   `env:"TCP_SERVER_TRACE_PER_CONNECTION"`
+	Port                  uint16 `env:"TCP_SERVER_PORT" validate:"required"`
+	ShutdownOnError       bool   `env:"TCP_SERVER_SHUTDOWN_ON_ERROR"`
+	TracePerConnection    bool   `env:"TCP_SERVER_TRACE_PER_CONNECTION"`
+	ConcurrentConnections uint32 `env:"TCP_SERVER_CONCURRENT_CONNECTIONS" validate:"min=256;max=65536"`
+}
+
+func init() {
+	configuration.SetDefault("TCP_SERVER_CONCURRENT_CONNECTIONS", "1024")
 }
 
 type ServerHandler interface {
@@ -47,7 +53,7 @@ func NewServer(
 		shutdown:  shutdown,
 		config:    config,
 		handler:   handler,
-		semaphore: make(chan struct{}, 1024),
+		semaphore: make(chan struct{}, config.ConcurrentConnections),
 	}
 	lifecycle.Append(fx.Hook{
 		OnStart: server.onStart,

@@ -113,7 +113,7 @@ func (s *httpServer) dumpRoutes(
 	middlewares ...func(http.Handler) http.Handler,
 ) error {
 	s.logger.Info().
-		Stringer("handler", log.Func(handler)).
+		Object("handler", log.Func(handler)).
 		Array("middlewares", log.Funcs(middlewares)).
 		Msgf("Route: %s %s", method, route)
 	return nil
