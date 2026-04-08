@@ -2,6 +2,10 @@ module github.com/thanhminhmr/go-common
 
 go 1.25.0
 
+retract (
+	v0.0.26 // broken TCP server
+)
+
 require (
 	github.com/go-chi/chi/v5 v5.2.5
 	github.com/go-playground/validator/v10 v10.30.2
