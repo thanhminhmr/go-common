@@ -8,6 +8,7 @@ package tcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/rand/v2"
 	"net"
@@ -107,9 +108,11 @@ func (s *tcpServer) worker(listener *net.TCPListener) {
 			s.logger.Error().Err(err).Uint16("port", s.config.Port).Msg("Failed to accept connection")
 			if s.config.ShutdownOnError {
 				if err := s.shutdown.Shutdown(); err != nil {
-					s.logger.Error().Err(err).Msg("Failed to send shutdown signal")
+					s.logger.Error().Err(err).Uint16("port", s.config.Port).
+						Msg("Failed to send shutdown signal")
 				} else {
-					s.logger.Info().Err(err).Msg("Sent shutdown signal")
+					s.logger.Info().Err(err).Uint16("port", s.config.Port).
+						Msg("Sent shutdown signal")
 				}
 			}
 		}
@@ -127,7 +130,9 @@ func (s *tcpServer) execute(connection *net.TCPConn) {
 	}
 	defer func() {
 		if recovered := exception.Recover(recover()); recovered != nil {
-			logger.Error().Any("recovered", recovered).Msg("Panic while handling connection")
+			logger.Error().Uint16("port", s.config.Port).
+				Any("recovered", recovered).
+				Msg("Panic while handling connection")
 		}
 		if s.config.TracePerConnection {
 			logger.Trace().Uint16("port", s.config.Port).
@@ -137,17 +142,17 @@ func (s *tcpServer) execute(connection *net.TCPConn) {
 		}
 	}()
 	defer func() {
-		if err := connection.Close(); err != nil && err != net.ErrClosed {
+		if err := connection.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
 			logger.Error().Err(err).Uint16("port", s.config.Port).Msg("Failed to close connection")
 		}
 	}()
 	if err := s.handler(logger.WithContext(s.ctx), connection); err != nil {
-		logger.Error().Err(err).Msg("Error handling connection")
+		logger.Error().Err(err).Uint16("port", s.config.Port).Msg("Error handling connection")
 	}
 }
 
 func (s *tcpServer) onStop(ctx context.Context) error {
-	s.logger.Info().Msg("Stopping listener")
+	s.logger.Info().Uint16("port", s.config.Port).Msg("Stopping listener")
 	s.cancel()
 	// waiting for connection to finish
 	done := make(chan struct{})
