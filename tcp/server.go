@@ -31,7 +31,7 @@ type tcpServer struct {
 	ctx       context.Context
 	cancel    context.CancelFunc
 	shutdown  fx.Shutdowner
-	logger    zerolog.Logger
+	logger    *zerolog.Logger
 	config    *ServerConfig
 	handler   ConnectionHandler[*net.TCPConn]
 	waitGroup sync.WaitGroup
@@ -49,7 +49,7 @@ func NewServer(
 		ctx:      ctx,
 		cancel:   cancel,
 		shutdown: shutdown,
-		logger:   logger.With().Uint16("port", config.Port).Logger(),
+		logger:   logger,
 		config:   config,
 		handler:  handler,
 	}
@@ -64,11 +64,11 @@ func (s *tcpServer) onStart(context.Context) error {
 	//goland:noinspection GoResourceLeak
 	listener, err := net.ListenTCP("tcp", &net.TCPAddr{Port: int(s.config.Port)})
 	if err != nil {
-		s.logger.Error().Err(err).Msg("Failed to listen")
+		s.logger.Error().Err(err).Uint16("port", s.config.Port).Msg("Failed to listen")
 		return err
 	}
 	// start workers
-	s.logger.Info().Msg("Listener started")
+	s.logger.Info().Uint16("port", s.config.Port).Msg("Listener started")
 	go s.worker(listener)
 	return nil
 }
@@ -78,9 +78,9 @@ func (s *tcpServer) worker(listener *net.TCPListener) {
 	// register listener closer
 	closer := sync.OnceFunc(func() {
 		if err := listener.Close(); err != nil {
-			s.logger.Error().Err(err).Msg("Failed to close listener")
+			s.logger.Error().Err(err).Uint16("port", s.config.Port).Msg("Failed to close listener")
 		}
-		s.logger.Info().Msg("Listener stopped")
+		s.logger.Info().Uint16("port", s.config.Port).Msg("Listener stopped")
 		s.waitGroup.Done()
 	})
 	defer closer()
@@ -91,7 +91,7 @@ func (s *tcpServer) worker(listener *net.TCPListener) {
 		// acquiring a slot in the semaphore, blocking while full
 		select {
 		case <-s.ctx.Done():
-			s.logger.Info().Msg("Stop accepting connection")
+			s.logger.Info().Uint16("port", s.config.Port).Msg("Stop accepting connection")
 			return
 		case semaphore <- struct{}{}:
 		}
@@ -104,7 +104,7 @@ func (s *tcpServer) worker(listener *net.TCPListener) {
 			continue
 		} else if s.ctx.Err() == nil {
 			// only if the server is not closed already
-			s.logger.Error().Err(err).Msg("Failed to accept connection")
+			s.logger.Error().Err(err).Uint16("port", s.config.Port).Msg("Failed to accept connection")
 			if s.config.ShutdownOnError {
 				if err := s.shutdown.Shutdown(); err != nil {
 					s.logger.Error().Err(err).Msg("Failed to send shutdown signal")
@@ -120,7 +120,7 @@ func (s *tcpServer) worker(listener *net.TCPListener) {
 func (s *tcpServer) execute(connection *net.TCPConn) {
 	logger := s.logger.With().Str("connection_id", fmt.Sprintf("%016x", rand.Uint64())).Logger()
 	if s.config.TracePerConnection {
-		logger.Trace().
+		logger.Trace().Uint16("port", s.config.Port).
 			Stringer("remote_address", connection.RemoteAddr()).
 			Stringer("local_address", connection.LocalAddr()).
 			Msg("Start handling connection")
@@ -130,15 +130,15 @@ func (s *tcpServer) execute(connection *net.TCPConn) {
 			logger.Error().Any("recovered", recovered).Msg("Panic while handling connection")
 		}
 		if s.config.TracePerConnection {
-			logger.Trace().
+			logger.Trace().Uint16("port", s.config.Port).
 				Stringer("remote_address", connection.RemoteAddr()).
 				Stringer("local_address", connection.LocalAddr()).
 				Msg("Finish handling connection")
 		}
 	}()
 	defer func() {
-		if err := connection.Close(); err != nil {
-			logger.Error().Err(err).Msg("Failed to close connection")
+		if err := connection.Close(); err != nil && err != net.ErrClosed {
+			logger.Error().Err(err).Uint16("port", s.config.Port).Msg("Failed to close connection")
 		}
 	}()
 	if err := s.handler(logger.WithContext(s.ctx), connection); err != nil {
