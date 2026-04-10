@@ -7,32 +7,32 @@
 package log
 
 import (
-	"context"
 	"os"
 
 	"github.com/rs/zerolog"
-	"go.uber.org/fx"
 )
 
-func init() {
-	zerolog.TimeFieldFormat = zerolog.TimeFormatUnixNano
+type Config struct {
+	TimestampFormat     string `env:"LOGGER_TIMESTAMP_FORMAT" validator:"required" default:"2006-01-02T15:04:05.999999999Z07:00"`
+	TimestampResolution string `env:"LOGGER_TIMESTAMP_RESOLUTION" validator:"oneof=seconds milliseconds microseconds nanoseconds" default:"nanoseconds"`
 }
 
-const timeFormat = "2006-01-02T15:04:05.000000000Z07:00"
-
-func ConsoleLogger(lifecycle fx.Lifecycle) context.Context {
+func ConsoleLogger(config *Config) *zerolog.Logger {
+	// config global resolution
+	switch config.TimestampResolution {
+	case "seconds":
+		zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
+	case "milliseconds":
+		zerolog.TimeFieldFormat = zerolog.TimeFormatUnixMs
+	case "microseconds":
+		zerolog.TimeFieldFormat = zerolog.TimeFormatUnixMicro
+	case "nanoseconds":
+		zerolog.TimeFieldFormat = zerolog.TimeFormatUnixNano
+	}
 	// create the logger
 	logger := zerolog.New(zerolog.ConsoleWriter{
 		Out:        os.Stderr,
-		TimeFormat: timeFormat,
+		TimeFormat: config.TimestampFormat,
 	}).With().Timestamp().Caller().Logger()
-	// create the global context with lifecycle cancel binding and the logger
-	ctx, cancel := context.WithCancel(logger.WithContext(context.Background()))
-	lifecycle.Append(fx.Hook{
-		OnStop: func(context.Context) error {
-			cancel()
-			return nil
-		},
-	})
-	return ctx
+	return &logger
 }
