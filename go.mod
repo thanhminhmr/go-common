@@ -2,12 +2,10 @@ module github.com/thanhminhmr/go-common
 
 go 1.25.0
 
-retract v0.0.26 // broken TCP server
-
 require (
 	github.com/go-playground/validator/v10 v10.30.2
 	github.com/go-viper/mapstructure/v2 v2.5.0
-	github.com/rs/zerolog v1.35.0
+	github.com/rs/zerolog v1.35.1
 	github.com/thanhminhmr/go-exception v0.0.8
 	go.uber.org/dig v1.19.0
 	go.uber.org/fx v1.24.0

@@ -34,5 +34,7 @@ func ConsoleLogger(config *Config) *zerolog.Logger {
 		Out:        os.Stderr,
 		TimeFormat: config.TimestampFormat,
 	}).With().Timestamp().Caller().Logger()
+	// set the logger as default logger
+	zerolog.DefaultContextLogger = &logger
 	return &logger
 }
