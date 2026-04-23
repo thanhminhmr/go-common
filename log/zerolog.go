@@ -7,9 +7,12 @@
 package log
 
 import (
+	"fmt"
 	"os"
+	"time"
 
 	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/diode"
 )
 
 type Config struct {
@@ -30,10 +33,12 @@ func ConsoleLogger(config *Config) *zerolog.Logger {
 		zerolog.TimeFieldFormat = zerolog.TimeFormatUnixNano
 	}
 	// create the logger
-	logger := zerolog.New(zerolog.ConsoleWriter{
+	logger := zerolog.New(diode.NewWriter(zerolog.ConsoleWriter{
 		Out:        os.Stderr,
 		TimeFormat: config.TimestampFormat,
-	}).With().Timestamp().Caller().Logger()
+	}, 1024, 10*time.Millisecond, func(missed int) {
+		fmt.Printf("Logger dropped %d messages\n", missed)
+	})).With().Timestamp().Caller().Logger()
 	// set the logger as default logger
 	zerolog.DefaultContextLogger = &logger
 	return &logger
