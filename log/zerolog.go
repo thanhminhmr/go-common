@@ -18,7 +18,7 @@ import (
 )
 
 type Config struct {
-	TimestampFormat     string `env:"LOGGER_TIMESTAMP_FORMAT" validator:"required" default:"2006-01-02T15:04:05.999999999Z07:00"`
+	TimestampFormat     string `env:"LOGGER_TIMESTAMP_FORMAT" validator:"required" default:"2006-01-02T15:04:05.000000000Z07:00"`
 	TimestampResolution string `env:"LOGGER_TIMESTAMP_RESOLUTION" validator:"oneof=seconds milliseconds microseconds nanoseconds" default:"nanoseconds"`
 	EnableSyncWriter    bool   `env:"LOGGER_ENABLE_SYNC_WRITER"`
 }
@@ -70,17 +70,15 @@ type asyncWriter struct {
 }
 
 func (w *asyncWriter) Write(buffer []byte) (n int, err error) {
-	{
-		// check if sync mode
-		if w.mode.Load() {
-			goto syncMode
-		}
+	// check if sync mode
+	switch {
+	case !w.mode.Load():
 		// async mode, try to write
 		w.lock.RLock()
 		// check if sync mode again
 		if w.mode.Load() {
 			w.lock.RUnlock()
-			goto syncMode
+			break
 		}
 		defer w.lock.RUnlock()
 		// async send buffer
@@ -95,7 +93,7 @@ func (w *asyncWriter) Write(buffer []byte) (n int, err error) {
 		w.sent <- msg
 		return length, nil
 	}
-syncMode:
+	// sync mode
 	w.lock.Lock()
 	defer w.lock.Unlock()
 	return w.writer.Write(buffer)
