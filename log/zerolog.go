@@ -40,10 +40,13 @@ func ConsoleLogger(lifecycle fx.Lifecycle, config *Config) *zerolog.Logger {
 		Out:        os.Stderr,
 		TimeFormat: config.TimestampFormat,
 	})
-	// check if sync mode is ff
-	if !config.EnableSyncWriter {
+	// check if sync mode is enabled
+	if config.EnableSyncWriter {
+		// wrap with sync writer
+		writer = zerolog.SyncWriter(writer)
+	} else {
 		// wrap with async writer
-		wrapped := &asyncWriter{
+		wrapped := asyncWriter{
 			writer: writer,
 			sent:   make(chan []byte, 1024),
 			closed: make(chan struct{}),
@@ -51,6 +54,7 @@ func ConsoleLogger(lifecycle fx.Lifecycle, config *Config) *zerolog.Logger {
 		// enable poll and switch to sync mode on shutdown
 		go wrapped.pollWriter()
 		lifecycle.Append(fx.Hook{OnStop: wrapped.syncMode})
+		writer = &wrapped
 	}
 	// create the logger
 	logger := zerolog.New(writer).With().Timestamp().Caller().Logger()
