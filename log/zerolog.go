@@ -7,20 +7,23 @@
 package log
 
 import (
-	"fmt"
+	"context"
+	"io"
 	"os"
-	"time"
+	"sync"
+	"sync/atomic"
 
 	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/diode"
+	"go.uber.org/fx"
 )
 
 type Config struct {
 	TimestampFormat     string `env:"LOGGER_TIMESTAMP_FORMAT" validator:"required" default:"2006-01-02T15:04:05.999999999Z07:00"`
 	TimestampResolution string `env:"LOGGER_TIMESTAMP_RESOLUTION" validator:"oneof=seconds milliseconds microseconds nanoseconds" default:"nanoseconds"`
+	EnableSyncWriter    bool   `env:"LOGGER_ENABLE_SYNC_WRITER"`
 }
 
-func ConsoleLogger(config *Config) *zerolog.Logger {
+func ConsoleLogger(lifecycle fx.Lifecycle, config *Config) *zerolog.Logger {
 	// config global resolution
 	switch config.TimestampResolution {
 	case "seconds":
@@ -32,14 +35,94 @@ func ConsoleLogger(config *Config) *zerolog.Logger {
 	case "nanoseconds":
 		zerolog.TimeFieldFormat = zerolog.TimeFormatUnixNano
 	}
-	// create the logger
-	logger := zerolog.New(diode.NewWriter(zerolog.ConsoleWriter{
+	// create the writer
+	writer := io.Writer(zerolog.ConsoleWriter{
 		Out:        os.Stderr,
 		TimeFormat: config.TimestampFormat,
-	}, 1024, 10*time.Millisecond, func(missed int) {
-		fmt.Printf("Logger dropped %d messages\n", missed)
-	})).With().Timestamp().Caller().Logger()
+	})
+	// check if sync mode is ff
+	if !config.EnableSyncWriter {
+		// wrap with async writer
+		wrapped := &asyncWriter{
+			writer: writer,
+			sent:   make(chan []byte, 1024),
+			closed: make(chan struct{}),
+		}
+		// enable poll and switch to sync mode on shutdown
+		go wrapped.pollWriter()
+		lifecycle.Append(fx.Hook{OnStop: wrapped.syncMode})
+	}
+	// create the logger
+	logger := zerolog.New(writer).With().Timestamp().Caller().Logger()
 	// set the logger as default logger
 	zerolog.DefaultContextLogger = &logger
 	return &logger
+}
+
+var buffers = sync.Pool{New: func() any { return make([]byte, 0, 1024) }}
+
+type asyncWriter struct {
+	writer io.Writer
+	sent   chan []byte
+	closed chan struct{}
+	lock   sync.RWMutex
+	mode   atomic.Bool
+}
+
+func (w *asyncWriter) Write(buffer []byte) (n int, err error) {
+	{
+		// check if sync mode
+		if w.mode.Load() {
+			goto syncMode
+		}
+		// async mode, try to write
+		w.lock.RLock()
+		// check if sync mode again
+		if w.mode.Load() {
+			w.lock.RUnlock()
+			goto syncMode
+		}
+		defer w.lock.RUnlock()
+		// async send buffer
+		length := len(buffer)
+		var msg []byte
+		if length <= 1024 {
+			msg = buffers.Get().([]byte)[:length]
+			copy(msg, buffer)
+		} else {
+			msg = append([]byte(nil), buffer...)
+		}
+		w.sent <- msg
+		return length, nil
+	}
+syncMode:
+	w.lock.Lock()
+	defer w.lock.Unlock()
+	return w.writer.Write(buffer)
+}
+
+func (w *asyncWriter) pollWriter() {
+	defer close(w.closed)
+	for buffer := range w.sent {
+		_, _ = w.writer.Write(buffer)
+		if cap(buffer) == 1024 {
+			buffers.Put(buffer)
+		}
+	}
+}
+
+func (w *asyncWriter) syncMode(ctx context.Context) error {
+	// lock first
+	w.lock.Lock()
+	defer w.lock.Unlock()
+	// switch to sync mode
+	w.mode.Store(true)
+	// close the async channel
+	close(w.sent)
+	// wait for writer routine return
+	select {
+	case <-w.closed:
+	case <-ctx.Done():
+	}
+	return ctx.Err()
 }
