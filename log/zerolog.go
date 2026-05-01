@@ -20,7 +20,7 @@ import (
 type Config struct {
 	TimestampFormat     string `env:"LOGGER_TIMESTAMP_FORMAT" validator:"required" default:"2006-01-02T15:04:05.000000000Z07:00"`
 	TimestampResolution string `env:"LOGGER_TIMESTAMP_RESOLUTION" validator:"oneof=seconds milliseconds microseconds nanoseconds" default:"nanoseconds"`
-	EnableSyncWriter    bool   `env:"LOGGER_ENABLE_SYNC_WRITER"`
+	EnableSyncMode      bool   `env:"LOGGER_ENABLE_SYNC_MODE"`
 }
 
 func ConsoleLogger(lifecycle fx.Lifecycle, config *Config) *zerolog.Logger {
@@ -41,7 +41,7 @@ func ConsoleLogger(lifecycle fx.Lifecycle, config *Config) *zerolog.Logger {
 		TimeFormat: config.TimestampFormat,
 	})
 	// check if sync mode is enabled
-	if config.EnableSyncWriter {
+	if config.EnableSyncMode {
 		// wrap with sync writer
 		writer = zerolog.SyncWriter(writer)
 	} else {
