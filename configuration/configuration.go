@@ -57,11 +57,33 @@ func SetDefault(key string, value string) {
 	}
 }
 
-// Load creates a configuration struct from multiple sources. Check the package
-// documents for the configuration priority.
-func Load[Type any](prefixes ...string) (*Type, error) {
+// Load creates and fills a configuration struct from multiple sources. Check the
+// package documents for the configuration priority.
+func Load[Type any]() (*Type, error) {
 	// create empty new struct and keys
 	config, configKeys := createConfigStructAndKeys[Type]()
+	if err := loadWithPrefix(config, configKeys); err != nil {
+		return nil, err
+	}
+	return config, nil
+}
+
+// Loader creates and fills a configuration struct from multiple sources. Check
+// the package documents for the configuration priority.
+func Loader[Type any](prefixes ...string) func() (*Type, error) {
+	return func() (*Type, error) {
+		// create empty new struct and keys
+		config, configKeys := createConfigStructAndKeys[Type]()
+		if err := loadWithPrefix(config, configKeys, prefixes...); err != nil {
+			return nil, err
+		}
+		return config, nil
+	}
+}
+
+// Load creates and fills a configuration struct from multiple sources. Check
+// the package documents for the configuration priority.
+func loadWithPrefix(config any, configKeys map[string]*string, prefixes ...string) error {
 	// load config map from global
 	configMap := loadConfigMapWithPrefixesFromGlobal(configKeys, prefixes)
 	// create decoder
@@ -77,11 +99,11 @@ func Load[Type any](prefixes ...string) (*Type, error) {
 	}
 	// decode and validate
 	if err := decoder.Decode(configMap); err != nil {
-		return nil, err
+		return err
 	} else if err := internalValidator.Struct(config); err != nil {
-		return nil, err
+		return err
 	}
-	return config, nil
+	return nil
 }
 
 func createConfigStructAndKeys[Type any]() (*Type, map[string]*string) {
