@@ -12,6 +12,7 @@
 //  2. [configuration.SetDefault] (no prefix)
 //  3. `.env` file in the current directory (no prefix)
 //  4. Environment variables (no prefix)
+//  5. ... (repeat)
 //
 // This order is then repeated for each prefix level, applied from the last
 // prefix backward (e.g., last prefix, last two prefixes, etc.).
@@ -59,26 +60,13 @@ func SetDefault(key string, value string) {
 
 // Load creates and fills a configuration struct from multiple sources. Check the
 // package documents for the configuration priority.
-func Load[Type any]() (*Type, error) {
+func Load[Type any](prefixes ...string) (*Type, error) {
 	// create empty new struct and keys
 	config, configKeys := createConfigStructAndKeys[Type]()
-	if err := loadWithPrefix(config, configKeys); err != nil {
+	if err := loadWithPrefix(config, configKeys, prefixes...); err != nil {
 		return nil, err
 	}
 	return config, nil
-}
-
-// Loader creates and fills a configuration struct from multiple sources. Check
-// the package documents for the configuration priority.
-func Loader[Type any](prefixes ...string) func() (*Type, error) {
-	return func() (*Type, error) {
-		// create empty new struct and keys
-		config, configKeys := createConfigStructAndKeys[Type]()
-		if err := loadWithPrefix(config, configKeys, prefixes...); err != nil {
-			return nil, err
-		}
-		return config, nil
-	}
 }
 
 // Load creates and fills a configuration struct from multiple sources. Check
