@@ -32,22 +32,21 @@ func NewServer(
 	config *ServerConfig,
 	handler ConnectionHandler[*net.TCPConn],
 ) ctrl.Starter {
-	return func(ctx context.Context) (ctrl.Runner, ctrl.Cleaner, error) {
-		logger := log.IntoCtx(ctx).With("port", config.Port)
+	return func(ctx context.Context) (ctrl.Runner, ctrl.Cleaner) {
+		logger := log.Logger(ctx).With("port", config.Port)
 		// create listener
 		listener, err := net.ListenTCP("tcp", &net.TCPAddr{Port: int(config.Port)})
 		if err != nil {
-			logger.Error("Failed to listen", "error", err)
-			return nil, nil, exception.String("TcpServer: Failed to listen").AddCause(err)
+			exception.Panic(exception.String("TcpServer: Failed to listen").AddCause(err))
 		}
-		logger.Info("Listener started")
+		logger.Info().Msg("Listener started")
 		// create wait
 		server := tcpServer{
 			config:   config,
 			handler:  handler,
 			listener: listener,
 		}
-		return server.run, server.cleanUp, nil
+		return server.run, server.cleanUp
 	}
 }
 
@@ -59,14 +58,14 @@ type tcpServer struct {
 }
 
 func (s *tcpServer) run(ctx context.Context, shutdown context.CancelFunc) {
-	logger := log.IntoCtx(ctx).With("port", s.config.Port)
+	logger := log.Logger(ctx).With("port", s.config.Port)
 	// create semaphore as a concurrent connection limiter
 	semaphore := make(chan struct{}, s.config.ConcurrentConnections)
 	for {
 		// acquiring a slot in the semaphore, blocking while full
 		select {
 		case <-ctx.Done():
-			logger.Info("Stop accepting connection")
+			logger.Info().Msg("Stop accepting connection")
 			return
 		case semaphore <- struct{}{}:
 		}
@@ -79,7 +78,7 @@ func (s *tcpServer) run(ctx context.Context, shutdown context.CancelFunc) {
 		} else {
 			// only if the server is not closed already
 			if ctx.Err() == nil {
-				logger.Error("Failed to accept connection", "error", err)
+				logger.Error().With("error", err).Msg("Failed to accept connection")
 				if s.config.ShutdownOnError {
 					shutdown()
 				}
@@ -90,35 +89,35 @@ func (s *tcpServer) run(ctx context.Context, shutdown context.CancelFunc) {
 }
 
 func (s *tcpServer) execute(ctx context.Context, connection *net.TCPConn) {
-	logger := log.IntoCtx(ctx).With("connection_id", rand.Text())
+	logger := log.Logger(ctx).With("connection_id", rand.Text())
 	if s.config.TracePerConnection {
 		traceLogger := logger.With(
 			"remote_address", connection.RemoteAddr(),
 			"local_address", connection.LocalAddr(),
 		)
-		traceLogger.Debug("Start handling connection")
-		defer traceLogger.Debug("Finish handling connection")
+		traceLogger.Debug().Msg("Start handling connection")
+		defer traceLogger.Debug().Msg("Finish handling connection")
 	}
 	defer exception.Recover(func(recovered exception.Exception) {
-		logger.Error("Panic while handling connection", "recovered", recovered)
+		logger.Error().With("recovered", recovered).Msg("Panic while handling connection")
 	})
 	defer func() {
 		if err := connection.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
-			logger.Error("Failed to close connection", "error", err)
+			logger.Error().With("error", err).Msg("Failed to close connection")
 		}
 	}()
 	if err := s.handler(logger, connection); err != nil {
-		logger.Error("Error handling connection", "error", err)
+		logger.Error().With("error", err).Msg("Error handling connection")
 	}
 }
 
 func (s *tcpServer) cleanUp(ctx context.Context) {
 	defer s.wait.Wait()
-	logger := log.IntoCtx(ctx).With("port", s.config.Port)
+	logger := log.Logger(ctx).With("port", s.config.Port)
 	// stop the listener
-	logger.Info("Stopping listener")
+	logger.Info().Msg("Stopping listener")
 	if err := s.listener.Close(); err != nil {
-		logger.Error("Failed to close listener", "error", err)
+		logger.Error().With("error", err).Msg("Failed to close listener")
 	}
-	logger.Info("Listener stopped")
+	logger.Info().Msg("Listener stopped")
 }

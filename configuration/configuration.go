@@ -61,12 +61,23 @@ func SetDefault(key string, value string) {
 // Load creates and fills a configuration struct from multiple sources. Check the
 // package documents for the configuration priority.
 func Load[Type any](prefixes ...string) (*Type, error) {
-	// create empty new struct and keys
-	config, configKeys := createConfigStructAndKeys[Type]()
-	if err := loadWithPrefix(config, configKeys, prefixes...); err != nil {
+	// create empty new struct
+	var config Type
+	if err := LoadInto(&config, prefixes...); err != nil {
 		return nil, err
 	}
-	return config, nil
+	return &config, nil
+}
+
+// LoadInto fills a configuration struct from multiple sources. Check the package
+// documents for the configuration priority.
+func LoadInto[Type any](config *Type, prefixes ...string) error {
+	// create new struct keys
+	configKeys := createConfigStructKeys[Type]()
+	if err := loadWithPrefix(config, configKeys, prefixes...); err != nil {
+		return err
+	}
+	return nil
 }
 
 // Load creates and fills a configuration struct from multiple sources. Check
@@ -76,11 +87,12 @@ func loadWithPrefix(config any, configKeys map[string]*string, prefixes ...strin
 	configMap := loadConfigMapWithPrefixesFromGlobal(configKeys, prefixes)
 	// create decoder
 	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
-		TagName:          "env",
-		DecodeHook:       internalDecodeHookFunc,
-		ZeroFields:       true,
-		WeaklyTypedInput: true,
-		Result:           config,
+		TagName:              "env",
+		DecodeHook:           internalDecodeHookFunc,
+		ZeroFields:           true,
+		WeaklyTypedInput:     true,
+		IgnoreUntaggedFields: true,
+		Result:               config,
 	})
 	if err != nil {
 		panic("BUG: Decoder must be valid: " + err.Error())
@@ -94,7 +106,7 @@ func loadWithPrefix(config any, configKeys map[string]*string, prefixes ...strin
 	return nil
 }
 
-func createConfigStructAndKeys[Type any]() (*Type, map[string]*string) {
+func createConfigStructKeys[Type any]() map[string]*string {
 	// check if type is struct
 	configType := reflect.TypeFor[Type]()
 	if configType.Kind() != reflect.Struct {
@@ -113,8 +125,7 @@ func createConfigStructAndKeys[Type any]() (*Type, map[string]*string) {
 		}
 	}
 	// create empty new struct
-	config := reflect.New(configType).Interface().(*Type)
-	return config, configKeys
+	return configKeys
 }
 
 func loadConfigMapWithPrefixesFromGlobal(configKeys map[string]*string, prefixes []string) map[string]string {

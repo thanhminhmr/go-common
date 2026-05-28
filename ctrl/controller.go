@@ -1,16 +1,31 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package ctrl
 
 import (
 	"context"
+	"slices"
 	"sync"
+	"sync/atomic"
 	"time"
 
+	"github.com/thanhminhmr/go-common/configuration"
 	"github.com/thanhminhmr/go-common/log"
-
 	"github.com/thanhminhmr/go-exception"
 )
 
-type Starter = func(ctx context.Context) (Runner, Cleaner, error)
+// Initializer initializes the controller state machine by calling [Register] as
+// needed, and panic if any error occurred in the process. Anything that had been
+// registered before the panic will be clean up gracefully.
+type Initializer = func()
+
+// Starter starts the service, usually with a timeout.
+type Starter = func(ctx context.Context) (Runner, Cleaner)
+
 type Runner = func(ctx context.Context, shutdown context.CancelFunc)
 type Cleaner = func(ctx context.Context)
 
@@ -19,91 +34,185 @@ type Config struct {
 	CleanerTimeout uint `env:"CONTROLLER_CLEANER_TIMEOUT" default:"30"`
 }
 
-func New(config *Config) *Controller {
-	ctx, cancel := context.WithCancel(context.Background())
-	return &Controller{
-		config: config,
-		ctx:    log.IntoCtx(ctx),
-		cancel: cancel,
+var (
+	config    Config
+	globalCtx context.Context
+	shutdown  context.CancelFunc
+	cleaned   chan struct{}
+	status    atomic.Uintptr
+	wait      sync.WaitGroup
+	mutex     sync.Mutex
+	runners   []Runner
+	cleaners  []Cleaner
+)
+
+const (
+	statusIsUninitialized = iota
+	statusIsInitializing
+	statusIsRunning
+	statusIsTerminating
+)
+
+func init() {
+	set()
+}
+
+func set() {
+	// load config
+	if err := configuration.LoadInto(&config); err != nil {
+		panic(err)
+	}
+	// create global context
+	globalCtx, shutdown = context.WithCancel(context.Background())
+	// create cleaned channel
+	cleaned = make(chan struct{})
+	// create cleaning handler
+	context.AfterFunc(globalCtx, cleanAll)
+}
+
+//goland:noinspection GoUnusedFunction
+func reset() {
+	set()
+	status = atomic.Uintptr{}
+	wait = sync.WaitGroup{}
+	runners = nil
+	cleaners = nil
+}
+
+func cleanAll() {
+	defer close(cleaned)
+	status.Store(statusIsTerminating)
+	logger := log.Logger(context.Background())
+	timeout := time.Duration(config.CleanerTimeout) * time.Second
+	for _, cleaner := range slices.Backward(cleaners) {
+		cleanTimeout(logger, cleaner, timeout)
 	}
 }
 
-type Controller struct {
-	config   *Config
-	ctx      *log.Ctx
-	cancel   context.CancelFunc
-	running  sync.WaitGroup
-	cleaning sync.WaitGroup
-	runners  []Runner
-}
-
-func (c *Controller) prepare(starter Starter) (runner Runner, cleaner Cleaner, err error) {
-	defer func() {
-		if err != nil {
-			c.cancel()
-			c.cleaning.Wait()
-		}
-	}()
-	defer exception.Recover(func(recovered exception.Exception) {
-		c.ctx.Error("Starter panicked", "recovered", recovered)
-		err = recovered
-	})
-	ctx := context.Context(c.ctx)
-	if c.config.StarterTimeout > 0 {
+func cleanTimeout(logger log.Ctx, cleaner Cleaner, timeout time.Duration) {
+	if timeout > 0 {
 		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(c.ctx, time.Duration(c.config.StarterTimeout)*time.Second)
+		logger, cancel = logger.WithTimeout(timeout)
 		defer cancel()
+		done := make(chan struct{})
+		go cleanOne(logger, cleaner, done)
+		select {
+		case <-logger.Done():
+			logger.Warn().With("error", logger.Err()).Msg("Cleaner timeout")
+		case <-done:
+		}
+	} else {
+		cleanOne(logger, cleaner, nil)
 	}
-	return starter(ctx)
 }
 
-func (c *Controller) Add(starter Starter) error {
-	// prepare runner
-	runner, cleaner, err := c.prepare(starter)
-	if err != nil {
-		return err
+func cleanOne(logger log.Ctx, cleaner Cleaner, done chan<- struct{}) {
+	if done != nil {
+		defer close(done)
 	}
-	// register cleaner
-	if cleaner != nil {
-		c.cleaning.Add(1)
-		context.AfterFunc(c.ctx, func() {
-			defer c.cleaning.Done()
-			defer exception.Recover(func(recovered exception.Exception) {
-				c.ctx.Error("Cleaner panicked", "recovered", recovered)
-			})
-			ctx := context.Context(c.ctx)
-			if c.config.CleanerTimeout > 0 {
-				var cancel context.CancelFunc
-				ctx, cancel = context.WithTimeout(c.ctx, time.Duration(c.config.CleanerTimeout)*time.Second)
-				defer cancel()
+	defer exception.Recover(func(recovered exception.Exception) {
+		logger.Error().With("recovered", recovered).Msg("Cleaner panicked")
+	})
+	cleaner(logger)
+}
+
+func startTimeout(logger log.Ctx, starter Starter, timeout time.Duration) {
+	if timeout > 0 {
+		var cancel context.CancelFunc
+		logger, cancel = logger.WithTimeout(timeout)
+		defer cancel()
+		done := make(chan any)
+		go startOne(logger, starter, done)
+		select {
+		case <-logger.Done():
+			logger.Warn().With("error", logger.Err()).Msg("Starter timeout")
+		case recovered := <-done:
+			if recovered != nil {
+				panic(recovered)
 			}
-			cleaner(ctx)
-		})
+		}
+	} else {
+		startOne(logger, starter, nil)
 	}
-	// register runner
-	c.runners = append(c.runners, runner)
-	return nil
 }
 
-func (c *Controller) Run() {
-	if c.ctx.Err() != nil {
-		panic("BUG: controller is already dead")
+func startOne(logger log.Ctx, starter Starter, done chan<- any) {
+	if done != nil {
+		defer close(done)
+		defer exception.Recover(func(recovered exception.Exception) { done <- recovered })
 	}
-	for _, runner := range c.runners {
+	// lock
+	mutex.Lock()
+	defer mutex.Unlock()
+	// call starter
+	runner, cleaner := starter(logger)
+	// add runner/cleaner if any
+	if runner != nil {
+		runners = append(runners, runner)
+	}
+	if cleaner != nil {
+		cleaners = append(cleaners, cleaner)
+	}
+}
+
+func runOne(runner Runner) {
+	defer wait.Done()
+	logger := log.Logger(globalCtx)
+	defer exception.Recover(func(recovered exception.Exception) {
+		logger.Error().With("recovered", recovered).Msg("Runner panicked")
+	})
+	runner(logger, shutdown)
+}
+
+func Register(starter Starter) {
+	RegisterWithTimeout(starter, time.Duration(config.StarterTimeout)*time.Second)
+}
+
+func RegisterWithTimeout(starter Starter, timeout time.Duration) {
+	if starter == nil {
+		panic("BUG: starter is nil")
+	}
+	if status.Load() != statusIsInitializing {
+		panic("BUG: Controller state is unexpected")
+	}
+	startTimeout(log.Logger(globalCtx), starter, timeout)
+}
+
+func Run(initialize Initializer) {
+	if initialize == nil {
+		panic("BUG: Initializer is nil")
+	}
+	// set the state to initializing
+	if !status.CompareAndSwap(statusIsUninitialized, statusIsInitializing) {
+		panic("BUG: Controller state is unexpected")
+	}
+	// defer shutdown cleanly
+	logger := log.Logger(globalCtx)
+	defer logger.Info().Msg("Cleaned up")
+	defer func() {
+		shutdown()
+		<-cleaned
+	}()
+	// register a recover
+	defer exception.Recover(func(recovered exception.Exception) {
+		logger.Error().With("recovered", recovered).Msg("Initializer panicked")
+	})
+	// run initializer
+	logger.Info().Msg("Initializing...")
+	initialize()
+	logger.Info().Msg("Initialized, starting runners...")
+	// set the state to running
+	if !status.CompareAndSwap(statusIsInitializing, statusIsRunning) {
+		panic("BUG: Controller state is unexpected")
+	}
+	// start runners
+	for _, runner := range runners {
 		// start the runner
-		c.running.Add(1)
-		go func() {
-			defer c.running.Done()
-			defer exception.Recover(func(recovered exception.Exception) {
-				c.ctx.Error("Runner panicked", "recovered", recovered)
-			})
-			runner(c.ctx, c.cancel)
-		}()
+		wait.Add(1)
+		go runOne(runner)
 	}
 	// wait for all runner/clean up to finish
-	c.running.Wait()
-	if c.ctx.Err() == nil {
-		c.cancel()
-	}
-	c.cleaning.Done()
+	logger.Info().Msg("Runners started")
+	wait.Wait()
+	logger.Info().Msg("Runners finished, cleaning up...")
 }

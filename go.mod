@@ -3,9 +3,8 @@ module github.com/thanhminhmr/go-common
 go 1.25.0
 
 require (
-	github.com/go-playground/validator/v10 v10.30.2
+	github.com/go-playground/validator/v10 v10.30.3
 	github.com/go-viper/mapstructure/v2 v2.5.0
-	github.com/phuslu/log v1.0.124
 	github.com/thanhminhmr/go-exception v0.0.13
 )
 
