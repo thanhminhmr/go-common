@@ -34,6 +34,58 @@ type Config struct {
 	CleanerTimeout uint `env:"CONTROLLER_CLEANER_TIMEOUT" default:"30"`
 }
 
+func Register(starter Starter) {
+	RegisterWithTimeout(starter, time.Duration(config.StarterTimeout)*time.Second)
+}
+
+func RegisterWithTimeout(starter Starter, timeout time.Duration) {
+	if starter == nil {
+		panic("BUG: starter is nil")
+	}
+	if status.Load() != statusIsInitializing {
+		panic("BUG: Controller state is unexpected")
+	}
+	startTimeout(log.Logger(globalCtx), starter, timeout)
+}
+
+func Run(initialize Initializer) {
+	if initialize == nil {
+		panic("BUG: Initializer is nil")
+	}
+	// set the state to initializing
+	if !status.CompareAndSwap(statusIsUninitialized, statusIsInitializing) {
+		panic("BUG: Controller state is unexpected")
+	}
+	// defer shutdown cleanly
+	defer func() {
+		shutdown()
+		<-cleaned
+	}()
+	// register a recover
+	defer exception.Recover(func(recovered exception.Exception) {
+		log.Logger(globalCtx).Error().With("recovered", recovered).Msg("Initializer panicked")
+	})
+	// run initializer
+	logger := log.Logger(globalCtx)
+	logger.Info().Msg("Initializing...")
+	initialize()
+	logger.Info().Msg("Initialized, starting runners...")
+	// set the state to running
+	if !status.CompareAndSwap(statusIsInitializing, statusIsRunning) {
+		panic("BUG: Controller state is unexpected")
+	}
+	// start runners
+	for _, runner := range runners {
+		// start the runner
+		wait.Add(1)
+		go runOne(runner)
+	}
+	// wait for all runner/clean up to finish
+	logger.Info().Msg("Runners started")
+	wait.Wait()
+	logger.Info().Msg("Runners finished")
+}
+
 var (
 	config    Config
 	globalCtx context.Context
@@ -70,6 +122,8 @@ func set() {
 	context.AfterFunc(globalCtx, cleanAll)
 }
 
+// reset is an internal details, use to run multiple tests.
+//
 //goland:noinspection GoUnusedFunction
 func reset() {
 	set()
@@ -83,6 +137,8 @@ func cleanAll() {
 	defer close(cleaned)
 	status.Store(statusIsTerminating)
 	logger := log.Logger(context.Background())
+	logger.Info().Msg("Cleaning up...")
+	defer logger.Info().Msg("Cleaned up")
 	timeout := time.Duration(config.CleanerTimeout) * time.Second
 	for _, cleaner := range slices.Backward(cleaners) {
 		cleanTimeout(logger, cleaner, timeout)
@@ -110,10 +166,12 @@ func cleanOne(logger log.Ctx, cleaner Cleaner, done chan<- struct{}) {
 	if done != nil {
 		defer close(done)
 	}
-	defer exception.Recover(func(recovered exception.Exception) {
-		logger.Error().With("recovered", recovered).Msg("Cleaner panicked")
-	})
+	defer exception.Recover(cleanRecovery)
 	cleaner(logger)
+}
+
+func cleanRecovery(recovered exception.Exception) {
+	log.Logger(globalCtx).Error().With("recovered", recovered).Msg("Cleaner panicked")
 }
 
 func startTimeout(logger log.Ctx, starter Starter, timeout time.Duration) {
@@ -157,62 +215,10 @@ func startOne(logger log.Ctx, starter Starter, done chan<- any) {
 
 func runOne(runner Runner) {
 	defer wait.Done()
-	logger := log.Logger(globalCtx)
-	defer exception.Recover(func(recovered exception.Exception) {
-		logger.Error().With("recovered", recovered).Msg("Runner panicked")
-	})
-	runner(logger, shutdown)
+	defer exception.Recover(runRecovery)
+	runner(log.Logger(globalCtx), shutdown)
 }
 
-func Register(starter Starter) {
-	RegisterWithTimeout(starter, time.Duration(config.StarterTimeout)*time.Second)
-}
-
-func RegisterWithTimeout(starter Starter, timeout time.Duration) {
-	if starter == nil {
-		panic("BUG: starter is nil")
-	}
-	if status.Load() != statusIsInitializing {
-		panic("BUG: Controller state is unexpected")
-	}
-	startTimeout(log.Logger(globalCtx), starter, timeout)
-}
-
-func Run(initialize Initializer) {
-	if initialize == nil {
-		panic("BUG: Initializer is nil")
-	}
-	// set the state to initializing
-	if !status.CompareAndSwap(statusIsUninitialized, statusIsInitializing) {
-		panic("BUG: Controller state is unexpected")
-	}
-	// defer shutdown cleanly
-	logger := log.Logger(globalCtx)
-	defer logger.Info().Msg("Cleaned up")
-	defer func() {
-		shutdown()
-		<-cleaned
-	}()
-	// register a recover
-	defer exception.Recover(func(recovered exception.Exception) {
-		logger.Error().With("recovered", recovered).Msg("Initializer panicked")
-	})
-	// run initializer
-	logger.Info().Msg("Initializing...")
-	initialize()
-	logger.Info().Msg("Initialized, starting runners...")
-	// set the state to running
-	if !status.CompareAndSwap(statusIsInitializing, statusIsRunning) {
-		panic("BUG: Controller state is unexpected")
-	}
-	// start runners
-	for _, runner := range runners {
-		// start the runner
-		wait.Add(1)
-		go runOne(runner)
-	}
-	// wait for all runner/clean up to finish
-	logger.Info().Msg("Runners started")
-	wait.Wait()
-	logger.Info().Msg("Runners finished, cleaning up...")
+func runRecovery(recovered exception.Exception) {
+	log.Logger(globalCtx).Error().With("recovered", recovered).Msg("Runner panicked")
 }
