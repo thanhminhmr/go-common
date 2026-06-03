@@ -18,7 +18,7 @@ import (
 //
 // Observers are invoked asynchronously by Trigger. Observers should treat args
 // as immutable, because the same arguments may be shared by multiple observers.
-type Observer func(event string, args ...any)
+type Observer = func(event string, args ...any)
 
 // Observable is a concurrent, zero-value-usable asynchronous event broadcaster.
 //

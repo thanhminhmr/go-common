@@ -9,7 +9,6 @@ package log
 import (
 	"context"
 	"log/slog"
-	"reflect"
 	"runtime"
 	"sync"
 	"time"
@@ -25,10 +24,10 @@ func Logger(ctx context.Context) Ctx {
 	if ctx, ok := ctx.(Ctx); ok {
 		return ctx
 	}
-	if value := ctx.Value(reflect.TypeFor[private]()); value != nil {
+	if value := ctx.Value(&handler); value != nil {
 		return Ctx{
 			ctx:     ctx,
-			handler: value.(unsafeHandler),
+			handler: value.(slog.JSONHandler),
 		}
 	}
 	return Ctx{
@@ -39,7 +38,7 @@ func Logger(ctx context.Context) Ctx {
 
 type Ctx struct {
 	ctx     context.Context
-	handler unsafeHandler
+	handler slog.JSONHandler
 }
 
 func (c Ctx) Deadline() (deadline time.Time, ok bool) {
@@ -55,7 +54,7 @@ func (c Ctx) Err() error {
 }
 
 func (c Ctx) Value(key any) any {
-	if key == reflect.TypeFor[private]() {
+	if key == &handler {
 		return c.handler
 	}
 	return c.ctx.Value(key)
@@ -98,14 +97,14 @@ func (c Ctx) WithDeadlineCause(deadline time.Time, cause error) (Ctx, context.Ca
 func (c Ctx) With(args ...any) Ctx {
 	return Ctx{
 		ctx:     c.ctx,
-		handler: slog.New(c.handler).With(args...).Handler().(unsafeHandler),
+		handler: *c.handler.WithAttrs(slog.Group("", args...).Value.Group()).(*slog.JSONHandler),
 	}
 }
 
 func (c Ctx) WithGroup(name string) Ctx {
 	return Ctx{
 		ctx:     c.ctx,
-		handler: c.handler.WithGroup(name).(unsafeHandler),
+		handler: *c.handler.WithGroup(name).(*slog.JSONHandler),
 	}
 }
 

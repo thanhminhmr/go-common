@@ -18,7 +18,7 @@ type Config struct {
 	Level     slog.Level `env:"LOGGER_LEVEL" default:"DEBUG"`
 }
 
-var handler unsafeHandler
+var handler slog.JSONHandler
 
 func init() {
 	// load config
@@ -27,10 +27,10 @@ func init() {
 		panic(err)
 	}
 	// create logger
-	handler = innerHandler(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
+	handler = *slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
 		AddSource: config.AddSource,
 		Level:     config.Level,
-	}))
+	})
 	// set default logger
-	slog.SetDefault(slog.New(handler))
+	slog.SetDefault(slog.New(&handler))
 }

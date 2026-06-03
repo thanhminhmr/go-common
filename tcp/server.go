@@ -19,7 +19,7 @@ import (
 	"github.com/thanhminhmr/go-exception"
 )
 
-type ConnectionHandler[Connection net.Conn] func(ctx context.Context, conn Connection) error
+type ConnectionHandler[Connection net.Conn] = func(ctx context.Context, conn Connection) error
 
 type ServerConfig struct {
 	Port                  uint16 `env:"TCP_SERVER_PORT" validate:"required"`

@@ -221,4 +221,5 @@ func runOne(runner Runner) {
 
 func runRecovery(recovered exception.Exception) {
 	log.Logger(globalCtx).Error().With("recovered", recovered).Msg("Runner panicked")
+	shutdown()
 }

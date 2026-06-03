@@ -9,6 +9,7 @@ package ctrl_test
 import (
 	"context"
 	"testing"
+	"time"
 	_ "unsafe"
 
 	"github.com/thanhminhmr/go-common/ctrl"
@@ -43,6 +44,28 @@ func TestRegisterPanic(t *testing.T) {
 	ctrl.Run(func() {
 		ctrl.Register(func(ctx context.Context) (ctrl.Runner, ctrl.Cleaner) { panic(private{}) })
 		t.Fail()
+	})
+}
+
+func TestRunnerNominal(t *testing.T) {
+	reset()
+	defer exception.Recover(func(ex exception.Exception) { t.Fail() })
+	ctrl.Run(func() {
+		defer exception.Recover(func(ex exception.Exception) { t.Fail() })
+		ctrl.Register(func(ctx context.Context) (ctrl.Runner, ctrl.Cleaner) {
+			return func(ctx context.Context, shutdown context.CancelFunc) {
+				panic(private{})
+			}, nil
+		})
+		ctrl.Register(func(ctx context.Context) (ctrl.Runner, ctrl.Cleaner) {
+			return func(ctx context.Context, shutdown context.CancelFunc) {
+				timer := time.After(time.Minute)
+				select {
+				case <-timer:
+				case <-ctx.Done():
+				}
+			}, nil
+		})
 	})
 }
 
