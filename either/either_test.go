@@ -7,10 +7,17 @@
 package either_test
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/thanhminhmr/go-common/either"
 )
+
+func TestSize(t *testing.T) {
+	if size := reflect.TypeFor[either.Either[any, any]]().Size(); size != 16 {
+		t.Errorf("Either should only consume 16 bytes, got %d bytes!", size)
+	}
+}
 
 func TestEitherNeither(t *testing.T) {
 	o := either.Either[struct{}, struct{}]{}
@@ -19,6 +26,9 @@ func TestEitherNeither(t *testing.T) {
 	}
 	if _, exists := o.Right(); exists {
 		t.Errorf("Right() should not exist")
+	}
+	if !o.Neither() {
+		t.Errorf("Neither() should be true")
 	}
 }
 
@@ -32,6 +42,9 @@ func TestEitherLeftNil(t *testing.T) {
 	if _, exists := o.Right(); exists {
 		t.Errorf("Right() should not exist")
 	}
+	if o.Neither() {
+		t.Errorf("Neither() should be false")
+	}
 }
 
 func TestEitherRightNil(t *testing.T) {
@@ -43,6 +56,9 @@ func TestEitherRightNil(t *testing.T) {
 		t.Errorf("Right() should exist")
 	} else if value != nil {
 		t.Errorf("Right() wrong value")
+	}
+	if o.Neither() {
+		t.Errorf("Neither() should be false")
 	}
 }
 
@@ -56,6 +72,9 @@ func TestEitherLeftByte(t *testing.T) {
 	if _, exists := o.Right(); exists {
 		t.Errorf("Right() should not exist")
 	}
+	if o.Neither() {
+		t.Errorf("Neither() should be false")
+	}
 }
 
 func TestEitherRightByte(t *testing.T) {
@@ -67,5 +86,8 @@ func TestEitherRightByte(t *testing.T) {
 		t.Errorf("Right() should exist")
 	} else if value != byte(7) {
 		t.Errorf("Right() wrong value")
+	}
+	if o.Neither() {
+		t.Errorf("Neither() should be false")
 	}
 }

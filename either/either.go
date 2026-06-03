@@ -27,6 +27,10 @@ func (b Either[Left, Right]) Right() (right Right, exists bool) {
 	return right, false
 }
 
+func (b Either[Left, Right]) Neither() bool {
+	return b.state == 0
+}
+
 func Left[Left, Right any](left Left) Either[Left, Right] {
 	return Either[Left, Right]{
 		state: -1,
