@@ -27,10 +27,8 @@ func init() {
 		panic(err)
 	}
 	// create logger
-	handler = *slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
-		AddSource: config.AddSource,
-		Level:     config.Level,
-	})
+	handler = *slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{AddSource: config.AddSource, Level: config.Level}).
+		WithGroup("extra").(*slog.JSONHandler)
 	// set default logger
 	slog.SetDefault(slog.New(&handler))
 }
