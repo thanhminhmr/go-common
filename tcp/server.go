@@ -14,7 +14,6 @@ import (
 	"sync"
 
 	"github.com/thanhminhmr/go-common/ctrl"
-	"github.com/thanhminhmr/go-common/log"
 
 	"github.com/thanhminhmr/go-exception"
 )
@@ -33,13 +32,13 @@ func NewServer(
 	handler ConnectionHandler[*net.TCPConn],
 ) ctrl.Starter {
 	return func(ctx context.Context) (ctrl.Runner, ctrl.Cleaner) {
-		logger := log.Logger(ctx).With("port", config.Port)
+		logCtx := ctrl.LogCtx(ctx).With().Uint16("port", config.Port).Logger()
 		// create listener
 		listener, err := net.ListenTCP("tcp", &net.TCPAddr{Port: int(config.Port)})
 		if err != nil {
 			exception.Panic(exception.String("TcpServer: Failed to listen").AddCause(err))
 		}
-		logger.Info().Msg("Listener started")
+		logCtx.Info().Msg("Listener started")
 		// create wait
 		server := tcpServer{
 			config:   config,
@@ -58,14 +57,14 @@ type tcpServer struct {
 }
 
 func (s *tcpServer) run(ctx context.Context, shutdown context.CancelFunc) {
-	logger := log.Logger(ctx).With("port", s.config.Port)
+	logCtx := ctrl.LogCtx(ctx).With().Uint16("port", s.config.Port).Logger()
 	// create semaphore as a concurrent connection limiter
 	semaphore := make(chan struct{}, s.config.ConcurrentConnections)
 	for {
 		// acquiring a slot in the semaphore, blocking while full
 		select {
 		case <-ctx.Done():
-			logger.Info().Msg("Stop accepting connection")
+			logCtx.Info().Msg("Stop accepting connection")
 			return
 		case semaphore <- struct{}{}:
 		}
@@ -78,7 +77,7 @@ func (s *tcpServer) run(ctx context.Context, shutdown context.CancelFunc) {
 		} else {
 			// only if the server is not closed already
 			if ctx.Err() == nil {
-				logger.Error().With("error", err).Msg("Failed to accept connection")
+				logCtx.Error().Err(err).Msg("Failed to accept connection")
 				if s.config.ShutdownOnError {
 					shutdown()
 				}
@@ -89,35 +88,35 @@ func (s *tcpServer) run(ctx context.Context, shutdown context.CancelFunc) {
 }
 
 func (s *tcpServer) execute(ctx context.Context, connection *net.TCPConn) {
-	logger := log.Logger(ctx).With("connection_id", rand.Text())
+	logCtx := ctrl.LogCtx(ctx).With().Str("connection_id", rand.Text()).Logger()
 	if s.config.TracePerConnection {
-		traceLogger := logger.With(
-			"remote_address", connection.RemoteAddr(),
-			"local_address", connection.LocalAddr(),
-		)
-		traceLogger.Debug().Msg("Start handling connection")
-		defer traceLogger.Debug().Msg("Finish handling connection")
+		traceLogCtx := logCtx.With().
+			Stringer("remote_address", connection.RemoteAddr()).
+			Stringer("local_address", connection.LocalAddr()).
+			Logger()
+		traceLogCtx.Debug().Msg("Start handling connection")
+		defer traceLogCtx.Debug().Msg("Finish handling connection")
 	}
 	defer exception.Recover(func(recovered exception.Exception) {
-		logger.Error().With("recovered", recovered).Msg("Panic while handling connection")
+		logCtx.Error().AnErr("recovered", recovered).Msg("Panic while handling connection")
 	})
 	defer func() {
 		if err := connection.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
-			logger.Error().With("error", err).Msg("Failed to close connection")
+			logCtx.Error().Err(err).Msg("Failed to close connection")
 		}
 	}()
-	if err := s.handler(logger, connection); err != nil {
-		logger.Error().With("error", err).Msg("Error handling connection")
+	if err := s.handler(logCtx, connection); err != nil {
+		logCtx.Error().Err(err).Msg("Error handling connection")
 	}
 }
 
 func (s *tcpServer) cleanUp(ctx context.Context) {
 	defer s.wait.Wait()
-	logger := log.Logger(ctx).With("port", s.config.Port)
+	logCtx := ctrl.LogCtx(ctx).With().Uint16("port", s.config.Port).Logger()
 	// stop the listener
-	logger.Info().Msg("Stopping listener")
+	logCtx.Info().Msg("Stopping listener")
 	if err := s.listener.Close(); err != nil {
-		logger.Error().With("error", err).Msg("Failed to close listener")
+		logCtx.Error().Err(err).Msg("Failed to close listener")
 	}
-	logger.Info().Msg("Listener stopped")
+	logCtx.Info().Msg("Listener stopped")
 }

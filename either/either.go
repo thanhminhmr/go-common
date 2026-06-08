@@ -27,6 +27,15 @@ func (b Either[Left, Right]) Right() (right Right, exists bool) {
 	return right, false
 }
 
+func (b Either[Left, Right]) Either() (left Left, right Right, state int) {
+	if b.state < 0 {
+		return *(*Left)(b.ptr), right, b.state
+	} else if b.state > 0 {
+		return left, *(*Right)(b.ptr), b.state
+	}
+	return
+}
+
 func (b Either[Left, Right]) Neither() bool {
 	return b.state == 0
 }

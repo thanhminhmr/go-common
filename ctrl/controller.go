@@ -13,8 +13,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/thanhminhmr/go-common/configuration"
-	"github.com/thanhminhmr/go-common/log"
 	"github.com/thanhminhmr/go-exception"
 )
 
@@ -29,13 +27,8 @@ type Starter = func(ctx context.Context) (Runner, Cleaner)
 type Runner = func(ctx context.Context, shutdown context.CancelFunc)
 type Cleaner = func(ctx context.Context)
 
-type Config struct {
-	StarterTimeout uint `env:"CONTROLLER_STARTER_TIMEOUT" default:"30"`
-	CleanerTimeout uint `env:"CONTROLLER_CLEANER_TIMEOUT" default:"30"`
-}
-
 func Register(starter Starter) {
-	RegisterWithTimeout(starter, time.Duration(config.StarterTimeout)*time.Second)
+	RegisterWithTimeout(starter, time.Duration(config.ControllerStarterTimeout)*time.Second)
 }
 
 func RegisterWithTimeout(starter Starter, timeout time.Duration) {
@@ -45,7 +38,12 @@ func RegisterWithTimeout(starter Starter, timeout time.Duration) {
 	if status.Load() != statusIsInitializing {
 		panic("BUG: Controller state is unexpected")
 	}
-	startTimeout(log.Logger(globalCtx), starter, timeout)
+	logCtx := LogCtx(globalCtx)
+	if timeout == 0 {
+		startOne(logCtx, starter, nil)
+	} else {
+		startTimeout(logCtx, starter, timeout)
+	}
 }
 
 func Run(initialize Initializer) {
@@ -63,13 +61,13 @@ func Run(initialize Initializer) {
 	}()
 	// register a recover
 	defer exception.Recover(func(recovered exception.Exception) {
-		log.Logger(globalCtx).Error().With("recovered", recovered).Msg("Initializer panicked")
+		LogCtx(globalCtx).Error().AnErr("recovered", recovered).Msg("Initializer panicked")
 	})
 	// run initializer
-	logger := log.Logger(globalCtx)
-	logger.Info().Msg("Initializing...")
+	logCtx := LogCtx(globalCtx)
+	logCtx.Info().Msg("Initializing...")
 	initialize()
-	logger.Info().Msg("Initialized, starting runners...")
+	logCtx.Info().Msg("Initialized, starting runners...")
 	// set the state to running
 	if !status.CompareAndSwap(statusIsInitializing, statusIsRunning) {
 		panic("BUG: Controller state is unexpected")
@@ -81,21 +79,20 @@ func Run(initialize Initializer) {
 		go runOne(runner)
 	}
 	// wait for all runner/clean up to finish
-	logger.Info().Msg("Runners started")
+	logCtx.Info().Msg("Runners started")
 	wait.Wait()
-	logger.Info().Msg("Runners finished")
+	logCtx.Info().Msg("Runners finished")
 }
 
 var (
-	config    Config
 	globalCtx context.Context
 	shutdown  context.CancelFunc
+	cleaners  []Cleaner
 	cleaned   chan struct{}
+	runners   []Runner
 	status    atomic.Uintptr
 	wait      sync.WaitGroup
 	mutex     sync.Mutex
-	runners   []Runner
-	cleaners  []Cleaner
 )
 
 const (
@@ -105,96 +102,83 @@ const (
 	statusIsTerminating
 )
 
-func init() {
-	set()
-}
-
-func set() {
-	// load config
-	if err := configuration.LoadInto(&config); err != nil {
-		panic(err)
-	}
+func setupController(logCleaner Cleaner) {
 	// create global context
 	globalCtx, shutdown = context.WithCancel(context.Background())
+	// set cleaners to have log cleaner as a default
+	cleaners = []Cleaner{logCleaner}
 	// create cleaned channel
 	cleaned = make(chan struct{})
+	// clear runners
+	runners = nil
+	// reset status
+	status = atomic.Uintptr{}
+	// reset wait group
+	wait = sync.WaitGroup{}
+	// reset mutex
+	mutex = sync.Mutex{}
 	// create cleaning handler
 	context.AfterFunc(globalCtx, cleanAll)
-}
-
-// reset is an internal details, use to run multiple tests.
-//
-//goland:noinspection GoUnusedFunction
-func reset() {
-	set()
-	status = atomic.Uintptr{}
-	wait = sync.WaitGroup{}
-	runners = nil
-	cleaners = nil
 }
 
 func cleanAll() {
 	defer close(cleaned)
 	status.Store(statusIsTerminating)
-	logger := log.Logger(context.Background())
+	logger := LogCtx(context.Background())
 	logger.Info().Msg("Cleaning up...")
 	defer logger.Info().Msg("Cleaned up")
-	timeout := time.Duration(config.CleanerTimeout) * time.Second
-	for _, cleaner := range slices.Backward(cleaners) {
-		cleanTimeout(logger, cleaner, timeout)
-	}
-}
-
-func cleanTimeout(logger log.Ctx, cleaner Cleaner, timeout time.Duration) {
-	if timeout > 0 {
-		var cancel context.CancelFunc
-		logger, cancel = logger.WithTimeout(timeout)
-		defer cancel()
-		done := make(chan struct{})
-		go cleanOne(logger, cleaner, done)
-		select {
-		case <-logger.Done():
-			logger.Warn().With("error", logger.Err()).Msg("Cleaner timeout")
-		case <-done:
+	timeout := time.Duration(config.ControllerCleanerTimeout) * time.Second
+	if timeout == 0 {
+		for _, cleaner := range slices.Backward(cleaners) {
+			cleanOne(logger, cleaner, nil)
 		}
 	} else {
-		cleanOne(logger, cleaner, nil)
+		for _, cleaner := range slices.Backward(cleaners) {
+			cleanTimeout(logger, cleaner, timeout)
+		}
 	}
 }
 
-func cleanOne(logger log.Ctx, cleaner Cleaner, done chan<- struct{}) {
+func cleanTimeout(logCtx LogContext, cleaner Cleaner, timeout time.Duration) {
+	var cancel context.CancelFunc
+	logCtx, cancel = logCtx.WithTimeout(timeout)
+	defer cancel()
+	done := make(chan struct{})
+	go cleanOne(logCtx, cleaner, done)
+	select {
+	case <-logCtx.Done():
+		logCtx.Warn().Err(logCtx.Err()).Msg("Cleaner timeout")
+	case <-done:
+	}
+}
+
+func cleanOne(logCtx LogContext, cleaner Cleaner, done chan<- struct{}) {
 	if done != nil {
 		defer close(done)
 	}
-	defer exception.Recover(cleanRecovery)
-	cleaner(logger)
+	defer exception.Recover(func(recovered exception.Exception) {
+		LogCtx(globalCtx).Error().AnErr("recovered", recovered).Msg("Cleaner panicked")
+	})
+	cleaner(logCtx)
 }
 
-func cleanRecovery(recovered exception.Exception) {
-	log.Logger(globalCtx).Error().With("recovered", recovered).Msg("Cleaner panicked")
-}
-
-func startTimeout(logger log.Ctx, starter Starter, timeout time.Duration) {
-	if timeout > 0 {
-		var cancel context.CancelFunc
-		logger, cancel = logger.WithTimeout(timeout)
-		defer cancel()
-		done := make(chan any)
-		go startOne(logger, starter, done)
-		select {
-		case <-logger.Done():
-			logger.Warn().With("error", logger.Err()).Msg("Starter timeout")
-		case recovered := <-done:
-			if recovered != nil {
-				panic(recovered)
-			}
+func startTimeout(logCtx LogContext, starter Starter, timeout time.Duration) {
+	var cancel context.CancelFunc
+	logCtx, cancel = logCtx.WithTimeout(timeout)
+	defer cancel()
+	done := make(chan any)
+	go startOne(logCtx, starter, done)
+	select {
+	case <-logCtx.Done():
+		logCtx.Warn().Err(logCtx.Err()).Msg("Starter timeout")
+	case recovered := <-done:
+		if recovered != nil {
+			panic(recovered)
 		}
-	} else {
-		startOne(logger, starter, nil)
 	}
 }
 
-func startOne(logger log.Ctx, starter Starter, done chan<- any) {
+func startOne(logCtx LogContext, starter Starter, done chan<- any) {
 	if done != nil {
 		defer close(done)
 		defer exception.Recover(func(recovered exception.Exception) { done <- recovered })
@@ -203,7 +187,7 @@ func startOne(logger log.Ctx, starter Starter, done chan<- any) {
 	mutex.Lock()
 	defer mutex.Unlock()
 	// call starter
-	runner, cleaner := starter(logger)
+	runner, cleaner := starter(logCtx)
 	// add runner/cleaner if any
 	if runner != nil {
 		runners = append(runners, runner)
@@ -215,11 +199,9 @@ func startOne(logger log.Ctx, starter Starter, done chan<- any) {
 
 func runOne(runner Runner) {
 	defer wait.Done()
-	defer exception.Recover(runRecovery)
-	runner(log.Logger(globalCtx), shutdown)
-}
-
-func runRecovery(recovered exception.Exception) {
-	log.Logger(globalCtx).Error().With("recovered", recovered).Msg("Runner panicked")
-	shutdown()
+	defer exception.Recover(func(recovered exception.Exception) {
+		LogCtx(globalCtx).Error().AnErr("recovered", recovered).Msg("Runner panicked")
+		shutdown()
+	})
+	runner(globalCtx, shutdown)
 }

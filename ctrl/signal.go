@@ -11,8 +11,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-
-	"github.com/thanhminhmr/go-common/log"
 )
 
 func ShutdownOnSignal(_ context.Context) (Runner, Cleaner) {
@@ -22,7 +20,7 @@ func ShutdownOnSignal(_ context.Context) (Runner, Cleaner) {
 		signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
 		select {
 		case received := <-signals:
-			log.Logger(ctx).Info().With("received", received.String()).Msg("Receive signal, shutting down...")
+			LogCtx(ctx).Info().Stringer("received", received).Msg("Receive signal, shutting down...")
 			shutdown()
 		case <-ctx.Done():
 		}

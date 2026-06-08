@@ -16,45 +16,41 @@ import (
 	"github.com/thanhminhmr/go-exception"
 )
 
-//go:linkname reset github.com/thanhminhmr/go-common/ctrl.reset
-func reset()
+//go:linkname setup github.com/thanhminhmr/go-common/ctrl.setup
+func setup()
 
-type private struct{}
-
-func (p private) String() string {
-	return "private"
-}
+const private = "private"
 
 func TestInitializerPanic(t *testing.T) {
-	reset()
+	setup()
 	defer exception.Recover(func(ex exception.Exception) { t.Fail() })
-	ctrl.Run(func() { panic(private{}) })
+	ctrl.Run(func() { panic(private) })
 }
 
 func TestStrayRegister(t *testing.T) {
-	reset()
+	setup()
 	defer exception.Recover(func(ex exception.Exception) {})
 	ctrl.Register(func(ctx context.Context) (ctrl.Runner, ctrl.Cleaner) { return nil, nil })
 	t.Fail()
 }
 
 func TestRegisterPanic(t *testing.T) {
-	reset()
+	setup()
 	defer exception.Recover(func(ex exception.Exception) { t.Fail() })
 	ctrl.Run(func() {
-		ctrl.Register(func(ctx context.Context) (ctrl.Runner, ctrl.Cleaner) { panic(private{}) })
+		ctrl.Register(func(ctx context.Context) (ctrl.Runner, ctrl.Cleaner) { panic(private) })
 		t.Fail()
 	})
 }
 
 func TestRunnerNominal(t *testing.T) {
-	reset()
+	setup()
 	defer exception.Recover(func(ex exception.Exception) { t.Fail() })
 	ctrl.Run(func() {
 		defer exception.Recover(func(ex exception.Exception) { t.Fail() })
 		ctrl.Register(func(ctx context.Context) (ctrl.Runner, ctrl.Cleaner) {
 			return func(ctx context.Context, shutdown context.CancelFunc) {
-				panic(private{})
+				panic(private)
 			}, nil
 		})
 		ctrl.Register(func(ctx context.Context) (ctrl.Runner, ctrl.Cleaner) {
@@ -70,7 +66,7 @@ func TestRunnerNominal(t *testing.T) {
 }
 
 func TestNominal(t *testing.T) {
-	reset()
+	setup()
 	defer exception.Recover(func(ex exception.Exception) { t.Fail() })
 	ctrl.Run(func() {
 		defer exception.Recover(func(ex exception.Exception) { t.Fail() })
@@ -79,10 +75,19 @@ func TestNominal(t *testing.T) {
 }
 
 func TestShutdown(t *testing.T) {
-	reset()
+	setup()
 	defer exception.Recover(func(ex exception.Exception) { t.Fail() })
 	ctrl.Run(func() {
 		defer exception.Recover(func(ex exception.Exception) { t.Fail() })
+		ctrl.Register(func(ctx context.Context) (ctrl.Runner, ctrl.Cleaner) {
+			return func(ctx context.Context, shutdown context.CancelFunc) {
+				timer := time.After(time.Minute)
+				select {
+				case <-timer:
+				case <-ctx.Done():
+				}
+			}, nil
+		})
 		ctrl.Register(func(ctx context.Context) (ctrl.Runner, ctrl.Cleaner) {
 			return func(ctx context.Context, shutdown context.CancelFunc) {
 				shutdown()
