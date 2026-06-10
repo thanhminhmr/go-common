@@ -32,7 +32,7 @@ func NewServer(
 	handler ConnectionHandler[*net.TCPConn],
 ) ctrl.Starter {
 	return func(ctx context.Context) (ctrl.Runner, ctrl.Cleaner) {
-		logCtx := ctrl.LogCtx(ctx).With().Uint16("port", config.Port).Logger()
+		logCtx := ctrl.Logger(ctx).With().Uint16("port", config.Port).Logger()
 		// create listener
 		listener, err := net.ListenTCP("tcp", &net.TCPAddr{Port: int(config.Port)})
 		if err != nil {
@@ -57,7 +57,7 @@ type tcpServer struct {
 }
 
 func (s *tcpServer) run(ctx context.Context, shutdown context.CancelFunc) {
-	logCtx := ctrl.LogCtx(ctx).With().Uint16("port", s.config.Port).Logger()
+	logCtx := ctrl.Logger(ctx).With().Uint16("port", s.config.Port).Logger()
 	// create semaphore as a concurrent connection limiter
 	semaphore := make(chan struct{}, s.config.ConcurrentConnections)
 	for {
@@ -88,7 +88,7 @@ func (s *tcpServer) run(ctx context.Context, shutdown context.CancelFunc) {
 }
 
 func (s *tcpServer) execute(ctx context.Context, connection *net.TCPConn) {
-	logCtx := ctrl.LogCtx(ctx).With().Str("connection_id", rand.Text()).Logger()
+	logCtx := ctrl.Logger(ctx).With().Str("connection_id", rand.Text()).Logger()
 	if s.config.TracePerConnection {
 		traceLogCtx := logCtx.With().
 			Stringer("remote_address", connection.RemoteAddr()).
@@ -105,14 +105,14 @@ func (s *tcpServer) execute(ctx context.Context, connection *net.TCPConn) {
 			logCtx.Error().Err(err).Msg("Failed to close connection")
 		}
 	}()
-	if err := s.handler(logCtx, connection); err != nil {
+	if err := s.handler(&logCtx, connection); err != nil {
 		logCtx.Error().Err(err).Msg("Error handling connection")
 	}
 }
 
 func (s *tcpServer) cleanUp(ctx context.Context) {
 	defer s.wait.Wait()
-	logCtx := ctrl.LogCtx(ctx).With().Uint16("port", s.config.Port).Logger()
+	logCtx := ctrl.Logger(ctx).With().Uint16("port", s.config.Port).Logger()
 	// stop the listener
 	logCtx.Info().Msg("Stopping listener")
 	if err := s.listener.Close(); err != nil {

@@ -20,7 +20,7 @@ func ShutdownOnSignal(_ context.Context) (Runner, Cleaner) {
 		signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
 		select {
 		case received := <-signals:
-			LogCtx(ctx).Info().Stringer("received", received).Msg("Receive signal, shutting down...")
+			Logger(ctx).Info().Stringer("received", received).Msg("Receive signal, shutting down...")
 			shutdown()
 		case <-ctx.Done():
 		}

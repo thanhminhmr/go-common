@@ -4,28 +4,24 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-package either_test
+package common_test
 
 import (
-	"reflect"
 	"testing"
 
-	"github.com/thanhminhmr/go-common/either"
+	"github.com/thanhminhmr/go-common/common"
 )
 
-func TestSize(t *testing.T) {
-	if size := reflect.TypeFor[either.Either[any, any]]().Size(); size != 16 {
-		t.Errorf("Either should only consume 16 bytes, got %d bytes!", size)
-	}
-}
-
 func TestEitherNeither(t *testing.T) {
-	o := either.Either[struct{}, struct{}]{}
+	o := common.Either[struct{}, struct{}]{}
 	if _, exists := o.Left(); exists {
 		t.Errorf("Left() should not exist")
 	}
 	if _, exists := o.Right(); exists {
 		t.Errorf("Right() should not exist")
+	}
+	if _, _, state := o.Either(); state != 0 {
+		t.Errorf("Either() should be neither")
 	}
 	if !o.Neither() {
 		t.Errorf("Neither() should be true")
@@ -33,7 +29,7 @@ func TestEitherNeither(t *testing.T) {
 }
 
 func TestEitherLeftNil(t *testing.T) {
-	o := either.Left[any, any](nil)
+	o := common.Left[any, any](nil)
 	if value, exists := o.Left(); !exists {
 		t.Errorf("Left() should exist")
 	} else if value != nil {
@@ -41,6 +37,11 @@ func TestEitherLeftNil(t *testing.T) {
 	}
 	if _, exists := o.Right(); exists {
 		t.Errorf("Right() should not exist")
+	}
+	if value, _, state := o.Either(); state >= 0 {
+		t.Errorf("Either() should be left")
+	} else if value != nil {
+		t.Errorf("Either() wrong left value")
 	}
 	if o.Neither() {
 		t.Errorf("Neither() should be false")
@@ -48,7 +49,7 @@ func TestEitherLeftNil(t *testing.T) {
 }
 
 func TestEitherRightNil(t *testing.T) {
-	o := either.Right[any, any](nil)
+	o := common.Right[any, any](nil)
 	if _, exists := o.Left(); exists {
 		t.Errorf("Left() should not exist")
 	}
@@ -57,13 +58,18 @@ func TestEitherRightNil(t *testing.T) {
 	} else if value != nil {
 		t.Errorf("Right() wrong value")
 	}
+	if _, value, state := o.Either(); state <= 0 {
+		t.Errorf("Either() should be right")
+	} else if value != nil {
+		t.Errorf("Either() wrong right value")
+	}
 	if o.Neither() {
 		t.Errorf("Neither() should be false")
 	}
 }
 
 func TestEitherLeftByte(t *testing.T) {
-	o := either.Left[byte, byte](7)
+	o := common.Left[byte, byte](7)
 	if value, exists := o.Left(); !exists {
 		t.Errorf("Left() should exist")
 	} else if value != byte(7) {
@@ -72,13 +78,18 @@ func TestEitherLeftByte(t *testing.T) {
 	if _, exists := o.Right(); exists {
 		t.Errorf("Right() should not exist")
 	}
+	if value, _, state := o.Either(); state >= 0 {
+		t.Errorf("Either() should be left")
+	} else if value != byte(7) {
+		t.Errorf("Either() wrong left value")
+	}
 	if o.Neither() {
 		t.Errorf("Neither() should be false")
 	}
 }
 
 func TestEitherRightByte(t *testing.T) {
-	o := either.Right[byte, byte](7)
+	o := common.Right[byte, byte](7)
 	if _, exists := o.Left(); exists {
 		t.Errorf("Left() should not exist")
 	}
@@ -86,6 +97,11 @@ func TestEitherRightByte(t *testing.T) {
 		t.Errorf("Right() should exist")
 	} else if value != byte(7) {
 		t.Errorf("Right() wrong value")
+	}
+	if _, value, state := o.Either(); state <= 0 {
+		t.Errorf("Either() should be right")
+	} else if value != byte(7) {
+		t.Errorf("Either() wrong right value")
 	}
 	if o.Neither() {
 		t.Errorf("Neither() should be false")

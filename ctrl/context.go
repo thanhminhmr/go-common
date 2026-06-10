@@ -11,9 +11,9 @@ import (
 	"fmt"
 	"net"
 	"time"
-	"unsafe"
 
 	"github.com/rs/zerolog"
+	"github.com/thanhminhmr/go-common/common"
 )
 
 type LogLevel = zerolog.Level
@@ -22,120 +22,87 @@ type LogArray = zerolog.Array
 type LogArrayMarshaler = zerolog.LogArrayMarshaler
 type LogObjectMarshaler = zerolog.LogObjectMarshaler
 
-func LogCtx(ctx context.Context) LogContext {
+func Logger(ctx context.Context) *LogCtx {
+	logger := &globalLogger
 	if ctx == nil {
-		return LogContext{logger: globalLogger}.setCtx(context.Background())
+		ctx = context.Background()
+	} else if logCtx, ok := ctx.(*LogCtx); ok {
+		return logCtx
+	} else if value := ctx.Value(&logWriter); value != nil {
+		logger = value.(*zerolog.Logger)
 	}
-	if ctx, ok := ctx.(LogContext); ok {
-		return ctx
-	}
-	if value := ctx.Value(&logWriter); value != nil {
-		return LogContext{logger: value.(zerolog.Logger)}.setCtx(ctx)
-	}
-	return LogContext{logger: globalLogger}.setCtx(ctx)
+	return &LogCtx{logger: logger.With().Ctx(ctx).Logger()}
 }
 
-type LogContext struct {
+type LogCtx struct {
+	_      common.NoCopy
 	logger zerolog.Logger
 }
 
-type zerologLogger struct {
-	w       zerolog.LevelWriter
-	level   zerolog.Level
-	sampler zerolog.Sampler
-	context []byte
-	hooks   []zerolog.Hook
-	stack   bool
-	ctx     context.Context
-}
+func (c *LogCtx) ptr() *LogCtx { return c }
 
-func (c LogContext) ctx() context.Context {
-	return (*zerologLogger)(unsafe.Pointer(&c.logger)).ctx
-}
+func (c *LogCtx) Deadline() (deadline time.Time, ok bool) { return getCtx(&c.logger).Deadline() }
 
-func (c LogContext) setCtx(ctx context.Context) LogContext {
-	(*zerologLogger)(unsafe.Pointer(&c.logger)).ctx = ctx
-	return c
-}
+func (c *LogCtx) Done() <-chan struct{} { return getCtx(&c.logger).Done() }
 
-func (c LogContext) Deadline() (deadline time.Time, ok bool) {
-	return c.ctx().Deadline()
-}
+func (c *LogCtx) Err() error { return getCtx(&c.logger).Err() }
 
-func (c LogContext) Done() <-chan struct{} {
-	return c.ctx().Done()
-}
-
-func (c LogContext) Err() error {
-	return c.ctx().Err()
-}
-
-func (c LogContext) Value(key any) any {
+func (c *LogCtx) Value(key any) any {
 	if key == &logWriter {
-		return c.logger
+		return &c.logger
 	}
-	return c.ctx().Value(key)
+	return getCtx(&c.logger).Value(key)
 }
 
-func (c LogContext) WithValue(key, value any) LogContext {
-	ctx := context.WithValue(c.ctx(), key, value)
-	return c.setCtx(ctx)
+func (c *LogCtx) Level(level LogLevel) *LogEvent { return c.logger.WithLevel(level) }
+
+func (c *LogCtx) Trace() *LogEvent { return c.logger.Trace() }
+func (c *LogCtx) Debug() *LogEvent { return c.logger.Debug() }
+func (c *LogCtx) Info() *LogEvent  { return c.logger.Info() }
+func (c *LogCtx) Warn() *LogEvent  { return c.logger.Warn() }
+func (c *LogCtx) Error() *LogEvent { return c.logger.Error() }
+func (c *LogCtx) With() LogBuilder { return LogBuilder{ctx: c.logger.With()} }
+
+func (c *LogCtx) WithValue(key, value any) *LogCtx {
+	ctx := context.WithValue(getCtx(&c.logger), key, value)
+	return &LogCtx{logger: c.logger.With().Ctx(ctx).Logger()}
 }
 
-func (c LogContext) WithCancel() (LogContext, context.CancelFunc) {
-	ctx, cancel := context.WithCancel(c.ctx())
-	return c.setCtx(ctx), cancel
+func (c *LogCtx) WithCancel() (*LogCtx, context.CancelFunc) {
+	ctx, cancel := context.WithCancel(getCtx(&c.logger))
+	return &LogCtx{logger: c.logger.With().Ctx(ctx).Logger()}, cancel
 }
 
-func (c LogContext) WithCancelCause() (LogContext, context.CancelCauseFunc) {
-	ctx, cancel := context.WithCancelCause(c.ctx())
-	return c.setCtx(ctx), cancel
+func (c *LogCtx) WithCancelCause() (*LogCtx, context.CancelCauseFunc) {
+	ctx, cancel := context.WithCancelCause(getCtx(&c.logger))
+	return &LogCtx{logger: c.logger.With().Ctx(ctx).Logger()}, cancel
 }
 
-func (c LogContext) WithTimeout(timeout time.Duration) (LogContext, context.CancelFunc) {
-	ctx, cancel := context.WithTimeout(c.ctx(), timeout)
-	return c.setCtx(ctx), cancel
+func (c *LogCtx) WithTimeout(timeout time.Duration) (*LogCtx, context.CancelFunc) {
+	ctx, cancel := context.WithTimeout(getCtx(&c.logger), timeout)
+	return &LogCtx{logger: c.logger.With().Ctx(ctx).Logger()}, cancel
 }
 
-func (c LogContext) WithTimeoutCause(timeout time.Duration, cause error) (LogContext, context.CancelFunc) {
-	ctx, cancel := context.WithTimeoutCause(c.ctx(), timeout, cause)
-	return c.setCtx(ctx), cancel
+func (c *LogCtx) WithTimeoutCause(timeout time.Duration, cause error) (*LogCtx, context.CancelFunc) {
+	ctx, cancel := context.WithTimeoutCause(getCtx(&c.logger), timeout, cause)
+	return &LogCtx{logger: c.logger.With().Ctx(ctx).Logger()}, cancel
 }
 
-func (c LogContext) WithDeadline(deadline time.Time) (LogContext, context.CancelFunc) {
-	ctx, cancel := context.WithDeadline(c.ctx(), deadline)
-	return c.setCtx(ctx), cancel
+func (c *LogCtx) WithDeadline(deadline time.Time) (*LogCtx, context.CancelFunc) {
+	ctx, cancel := context.WithDeadline(getCtx(&c.logger), deadline)
+	return &LogCtx{logger: c.logger.With().Ctx(ctx).Logger()}, cancel
 }
 
-func (c LogContext) WithDeadlineCause(deadline time.Time, cause error) (LogContext, context.CancelFunc) {
-	ctx, cancel := context.WithDeadlineCause(c.ctx(), deadline, cause)
-	return c.setCtx(ctx), cancel
+func (c *LogCtx) WithDeadlineCause(deadline time.Time, cause error) (*LogCtx, context.CancelFunc) {
+	ctx, cancel := context.WithDeadlineCause(getCtx(&c.logger), deadline, cause)
+	return &LogCtx{logger: c.logger.With().Ctx(ctx).Logger()}, cancel
 }
-
-func (c LogContext) With() LogBuilder {
-	return LogBuilder{ctx: c.logger.With()}
-}
-
-func (c LogContext) Trace() *LogEvent { return c.logger.Trace() }
-
-func (c LogContext) Debug() *LogEvent { return c.logger.Debug() }
-
-func (c LogContext) Info() *LogEvent { return c.logger.Info() }
-
-func (c LogContext) Warn() *LogEvent { return c.logger.Warn() }
-
-func (c LogContext) Error() *LogEvent { return c.logger.Error() }
-
-func (c LogContext) Level(level LogLevel) *LogEvent { return c.logger.WithLevel(level) }
 
 type LogBuilder struct {
 	ctx zerolog.Context
 }
 
-// Logger returns the logger with the context previously set.
-func (b LogBuilder) Logger() LogContext {
-	return LogContext{logger: b.ctx.Logger()}
-}
+func (b LogBuilder) Logger() LogCtx { return LogCtx{logger: b.ctx.Logger()} }
 
 func (b LogBuilder) Fields(value any) LogBuilder {
 	return LogBuilder{ctx: b.ctx.Fields(value)}
@@ -219,10 +186,6 @@ func (b LogBuilder) Errs(key string, values []error) LogBuilder {
 
 func (b LogBuilder) Err(value error) LogBuilder {
 	return LogBuilder{ctx: b.ctx.Err(value)}
-}
-
-func (b LogBuilder) Ctx(value context.Context) LogBuilder {
-	return LogBuilder{ctx: b.ctx.Ctx(value)}
 }
 
 func (b LogBuilder) Bool(key string, value bool) LogBuilder {

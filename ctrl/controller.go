@@ -38,7 +38,7 @@ func RegisterWithTimeout(starter Starter, timeout time.Duration) {
 	if status.Load() != statusIsInitializing {
 		panic("BUG: Controller state is unexpected")
 	}
-	logCtx := LogCtx(globalCtx)
+	logCtx := Logger(globalCtx)
 	if timeout == 0 {
 		startOne(logCtx, starter, nil)
 	} else {
@@ -61,10 +61,10 @@ func Run(initialize Initializer) {
 	}()
 	// register a recover
 	defer exception.Recover(func(recovered exception.Exception) {
-		LogCtx(globalCtx).Error().AnErr("recovered", recovered).Msg("Initializer panicked")
+		Logger(globalCtx).Error().AnErr("recovered", recovered).Msg("Initializer panicked")
 	})
 	// run initializer
-	logCtx := LogCtx(globalCtx)
+	logCtx := Logger(globalCtx)
 	logCtx.Info().Msg("Initializing...")
 	initialize()
 	logCtx.Info().Msg("Initialized, starting runners...")
@@ -124,7 +124,7 @@ func setupController(logCleaner Cleaner) {
 func cleanAll() {
 	defer close(cleaned)
 	status.Store(statusIsTerminating)
-	logger := LogCtx(context.Background())
+	logger := Logger(context.Background())
 	logger.Info().Msg("Cleaning up...")
 	defer logger.Info().Msg("Cleaned up")
 	timeout := time.Duration(config.ControllerCleanerTimeout) * time.Second
@@ -139,7 +139,7 @@ func cleanAll() {
 	}
 }
 
-func cleanTimeout(logCtx LogContext, cleaner Cleaner, timeout time.Duration) {
+func cleanTimeout(logCtx *LogCtx, cleaner Cleaner, timeout time.Duration) {
 	var cancel context.CancelFunc
 	logCtx, cancel = logCtx.WithTimeout(timeout)
 	defer cancel()
@@ -152,17 +152,17 @@ func cleanTimeout(logCtx LogContext, cleaner Cleaner, timeout time.Duration) {
 	}
 }
 
-func cleanOne(logCtx LogContext, cleaner Cleaner, done chan<- struct{}) {
+func cleanOne(logCtx *LogCtx, cleaner Cleaner, done chan<- struct{}) {
 	if done != nil {
 		defer close(done)
 	}
 	defer exception.Recover(func(recovered exception.Exception) {
-		LogCtx(globalCtx).Error().AnErr("recovered", recovered).Msg("Cleaner panicked")
+		Logger(globalCtx).Error().AnErr("recovered", recovered).Msg("Cleaner panicked")
 	})
 	cleaner(logCtx)
 }
 
-func startTimeout(logCtx LogContext, starter Starter, timeout time.Duration) {
+func startTimeout(logCtx *LogCtx, starter Starter, timeout time.Duration) {
 	var cancel context.CancelFunc
 	logCtx, cancel = logCtx.WithTimeout(timeout)
 	defer cancel()
@@ -178,7 +178,7 @@ func startTimeout(logCtx LogContext, starter Starter, timeout time.Duration) {
 	}
 }
 
-func startOne(logCtx LogContext, starter Starter, done chan<- any) {
+func startOne(logCtx *LogCtx, starter Starter, done chan<- any) {
 	if done != nil {
 		defer close(done)
 		defer exception.Recover(func(recovered exception.Exception) { done <- recovered })
@@ -200,7 +200,7 @@ func startOne(logCtx LogContext, starter Starter, done chan<- any) {
 func runOne(runner Runner) {
 	defer wait.Done()
 	defer exception.Recover(func(recovered exception.Exception) {
-		LogCtx(globalCtx).Error().AnErr("recovered", recovered).Msg("Runner panicked")
+		Logger(globalCtx).Error().AnErr("recovered", recovered).Msg("Runner panicked")
 		shutdown()
 	})
 	runner(globalCtx, shutdown)
