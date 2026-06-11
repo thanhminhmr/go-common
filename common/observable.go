@@ -48,7 +48,7 @@ type Observable struct {
 // On panics if fn is nil.
 func (o *Observable) On(event string, fn Observer) (cancel func()) {
 	if fn == nil {
-		panic("observable.On: fn cannot be nil")
+		panic("BUG: fn cannot be nil")
 	}
 	fnsAny, _ := o.fns.LoadOrStore(event, &sync.Map{})
 	fns := fnsAny.(*sync.Map)

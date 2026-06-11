@@ -19,79 +19,182 @@ import (
 //go:linkname setup github.com/thanhminhmr/go-common/ctrl.setup
 func setup()
 
-const private = "private"
+const errorValue = errorString("custom")
+
+type errorString string
+
+func (e errorString) Error() string {
+	return string(e)
+}
+
+func initializerPanic() { panic(errorValue) }
+
+func starterPanic(_ context.Context) (ctrl.Runner, ctrl.Cleaner) { panic(errorValue) }
+
+func starterEmpty(_ context.Context) (ctrl.Runner, ctrl.Cleaner) { return nil, nil }
+
+func starterRunnerCleanerPanic(_ context.Context) (ctrl.Runner, ctrl.Cleaner) {
+	return runnerPanic, cleanerPanic
+}
+
+func starterRunnerShutdown(_ context.Context) (ctrl.Runner, ctrl.Cleaner) {
+	return runnerShutdown, nil
+}
+
+func runnerPanic(_ context.Context, _ context.CancelFunc) { panic(errorValue) }
+
+func runnerShutdown(_ context.Context, shutdown context.CancelFunc) { shutdown() }
+
+func cleanerPanic(_ context.Context) { panic(errorValue) }
+
+func runnerTimeout(t *testing.T) ctrl.Runner {
+	return func(ctx context.Context, shutdown context.CancelFunc) {
+		timer := time.After(time.Minute)
+		select {
+		case <-timer:
+			t.Log("timed out")
+			t.FailNow()
+		case <-ctx.Done():
+		}
+	}
+}
+
+func starterRunnerTimeout(t *testing.T) ctrl.Starter {
+	return func(ctx context.Context) (ctrl.Runner, ctrl.Cleaner) {
+		return runnerTimeout(t), nil
+	}
+}
+
+func recoverFailing(t *testing.T) func(exception.Exception) {
+	return func(exception.Exception) { t.FailNow() }
+}
+
+func recoverLogging(t *testing.T) func(exception.Exception) {
+	return func(ex exception.Exception) { t.Log(ex) }
+}
+
+func timeoutTestFailed(t *testing.T, fn func()) {
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		fn()
+	}()
+	timer := time.After(time.Minute)
+	select {
+	case <-timer:
+		t.Log("timed out")
+		t.FailNow()
+	case <-done:
+	}
+}
+
+func starterNotCalledTestFailed(t *testing.T) (ctrl.Starter, func()) {
+	runner, runnerCheck := runnerNotCalledTestFailed(t)
+	cleaner, cleanerCheck := cleanerNotCalledTestFailed(t)
+	called := false
+	return func(_ context.Context) (ctrl.Runner, ctrl.Cleaner) {
+			called = true
+			return runner, cleaner
+		}, func() {
+			if !called {
+				t.FailNow()
+			}
+			runnerCheck()
+			cleanerCheck()
+		}
+}
+
+func runnerNotCalledTestFailed(t *testing.T) (ctrl.Runner, func()) {
+	called := false
+	return func(_ context.Context, _ context.CancelFunc) {
+			called = true
+		}, func() {
+			if !called {
+				t.FailNow()
+			}
+		}
+}
+
+func cleanerNotCalledTestFailed(t *testing.T) (ctrl.Cleaner, func()) {
+	called := false
+	return func(_ context.Context) {
+			called = true
+		}, func() {
+			if !called {
+				t.FailNow()
+			}
+		}
+}
+
+// ================================================================================
 
 func TestInitializerPanic(t *testing.T) {
 	setup()
-	defer exception.Recover(func(ex exception.Exception) { t.Fail() })
-	ctrl.Run(func() { panic(private) })
+	timeoutTestFailed(t, func() {
+		defer exception.Recover(recoverFailing(t))
+		ctrl.Control(initializerPanic)
+	})
 }
 
 func TestStrayRegister(t *testing.T) {
 	setup()
-	defer exception.Recover(func(ex exception.Exception) {})
-	ctrl.Register(func(ctx context.Context) (ctrl.Runner, ctrl.Cleaner) { return nil, nil })
-	t.Fail()
+	timeoutTestFailed(t, func() {
+		defer exception.Recover(recoverLogging(t))
+		ctrl.Register(starterEmpty)
+		t.FailNow() // stray Register should panic
+	})
 }
 
 func TestRegisterPanic(t *testing.T) {
 	setup()
-	defer exception.Recover(func(ex exception.Exception) { t.Fail() })
-	ctrl.Run(func() {
-		ctrl.Register(func(ctx context.Context) (ctrl.Runner, ctrl.Cleaner) { panic(private) })
-		t.Fail()
+	timeoutTestFailed(t, func() {
+		defer exception.Recover(recoverLogging(t))
+		ctrl.Control(func() {
+			ctrl.Register(starterPanic)
+			t.FailNow()
+		})
 	})
 }
 
-func TestRunnerNominal(t *testing.T) {
+func TestRunnerCleanerPanic(t *testing.T) {
 	setup()
-	defer exception.Recover(func(ex exception.Exception) { t.Fail() })
-	ctrl.Run(func() {
-		defer exception.Recover(func(ex exception.Exception) { t.Fail() })
-		ctrl.Register(func(ctx context.Context) (ctrl.Runner, ctrl.Cleaner) {
-			return func(ctx context.Context, shutdown context.CancelFunc) {
-				panic(private)
-			}, nil
-		})
-		ctrl.Register(func(ctx context.Context) (ctrl.Runner, ctrl.Cleaner) {
-			return func(ctx context.Context, shutdown context.CancelFunc) {
-				timer := time.After(time.Minute)
-				select {
-				case <-timer:
-				case <-ctx.Done():
-				}
-			}, nil
+	starter, deferCheck := starterNotCalledTestFailed(t)
+	defer deferCheck()
+	timeoutTestFailed(t, func() {
+		defer exception.Recover(recoverFailing(t))
+		ctrl.Control(func() {
+			defer exception.Recover(recoverFailing(t))
+			ctrl.Register(starterRunnerCleanerPanic)
+			ctrl.Register(starter)
+			ctrl.Register(starterRunnerTimeout(t))
 		})
 	})
 }
 
 func TestNominal(t *testing.T) {
 	setup()
-	defer exception.Recover(func(ex exception.Exception) { t.Fail() })
-	ctrl.Run(func() {
-		defer exception.Recover(func(ex exception.Exception) { t.Fail() })
-		ctrl.Register(func(ctx context.Context) (ctrl.Runner, ctrl.Cleaner) { return nil, nil })
+	starter, deferCheck := starterNotCalledTestFailed(t)
+	defer deferCheck()
+	timeoutTestFailed(t, func() {
+		defer exception.Recover(recoverFailing(t))
+		ctrl.Control(func() {
+			defer exception.Recover(recoverFailing(t))
+			ctrl.Register(starter)
+		})
 	})
 }
 
 func TestShutdown(t *testing.T) {
 	setup()
-	defer exception.Recover(func(ex exception.Exception) { t.Fail() })
-	ctrl.Run(func() {
-		defer exception.Recover(func(ex exception.Exception) { t.Fail() })
-		ctrl.Register(func(ctx context.Context) (ctrl.Runner, ctrl.Cleaner) {
-			return func(ctx context.Context, shutdown context.CancelFunc) {
-				timer := time.After(time.Minute)
-				select {
-				case <-timer:
-				case <-ctx.Done():
-				}
-			}, nil
-		})
-		ctrl.Register(func(ctx context.Context) (ctrl.Runner, ctrl.Cleaner) {
-			return func(ctx context.Context, shutdown context.CancelFunc) {
-				shutdown()
-			}, nil
+	starter, deferCheck := starterNotCalledTestFailed(t)
+	defer deferCheck()
+	timeoutTestFailed(t, func() {
+		defer exception.Recover(recoverFailing(t))
+		ctrl.Control(func() {
+			defer exception.Recover(recoverFailing(t))
+			ctrl.Register(starterRunnerTimeout(t))
+			ctrl.Register(starterRunnerShutdown)
+			ctrl.Register(starter)
 		})
 	})
 }

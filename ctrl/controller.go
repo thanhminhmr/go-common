@@ -38,16 +38,11 @@ func RegisterWithTimeout(starter Starter, timeout time.Duration) {
 	if status.Load() != statusIsInitializing {
 		panic("BUG: Controller state is unexpected")
 	}
-	logCtx := Logger(globalCtx)
-	if timeout == 0 {
-		startOne(logCtx, starter, nil)
-	} else {
-		startTimeout(logCtx, starter, timeout)
-	}
+	startTimeout(Logger(globalCtx), starter, timeout)
 }
 
-func Run(initialize Initializer) {
-	if initialize == nil {
+func Control(initializer Initializer) {
+	if initializer == nil {
 		panic("BUG: Initializer is nil")
 	}
 	// set the state to initializing
@@ -66,7 +61,7 @@ func Run(initialize Initializer) {
 	// run initializer
 	logCtx := Logger(globalCtx)
 	logCtx.Info().Msg("Initializing...")
-	initialize()
+	initializer()
 	logCtx.Info().Msg("Initialized, starting runners...")
 	// set the state to running
 	if !status.CompareAndSwap(statusIsInitializing, statusIsRunning) {
@@ -128,34 +123,30 @@ func cleanAll() {
 	logger.Info().Msg("Cleaning up...")
 	defer logger.Info().Msg("Cleaned up")
 	timeout := time.Duration(config.ControllerCleanerTimeout) * time.Second
-	if timeout == 0 {
-		for _, cleaner := range slices.Backward(cleaners) {
-			cleanOne(logger, cleaner, nil)
-		}
-	} else {
-		for _, cleaner := range slices.Backward(cleaners) {
-			cleanTimeout(logger, cleaner, timeout)
-		}
+	for _, cleaner := range slices.Backward(cleaners) {
+		cleanTimeout(logger, cleaner, timeout)
 	}
 }
 
 func cleanTimeout(logCtx *LogCtx, cleaner Cleaner, timeout time.Duration) {
-	var cancel context.CancelFunc
-	logCtx, cancel = logCtx.WithTimeout(timeout)
-	defer cancel()
+	// timeout
+	if timeout > 0 {
+		var cancel context.CancelFunc
+		logCtx, cancel = logCtx.WithTimeout(timeout)
+		defer cancel()
+	}
+	// run and wait
 	done := make(chan struct{})
 	go cleanOne(logCtx, cleaner, done)
 	select {
 	case <-logCtx.Done():
-		logCtx.Warn().Err(logCtx.Err()).Msg("Cleaner timeout")
+		logCtx.Warn().Err(logCtx.Err()).Msg("Cleaner cancelled")
 	case <-done:
 	}
 }
 
 func cleanOne(logCtx *LogCtx, cleaner Cleaner, done chan<- struct{}) {
-	if done != nil {
-		defer close(done)
-	}
+	defer close(done)
 	defer exception.Recover(func(recovered exception.Exception) {
 		Logger(globalCtx).Error().AnErr("recovered", recovered).Msg("Cleaner panicked")
 	})
@@ -163,29 +154,31 @@ func cleanOne(logCtx *LogCtx, cleaner Cleaner, done chan<- struct{}) {
 }
 
 func startTimeout(logCtx *LogCtx, starter Starter, timeout time.Duration) {
-	var cancel context.CancelFunc
-	logCtx, cancel = logCtx.WithTimeout(timeout)
-	defer cancel()
-	done := make(chan any)
+	// lock
+	mutex.Lock()
+	defer mutex.Unlock()
+	// timeout
+	if timeout > 0 {
+		var cancel context.CancelFunc
+		logCtx, cancel = logCtx.WithTimeout(timeout)
+		defer cancel()
+	}
+	// run and wait
+	done := make(chan exception.Exception)
 	go startOne(logCtx, starter, done)
 	select {
 	case <-logCtx.Done():
-		logCtx.Warn().Err(logCtx.Err()).Msg("Starter timeout")
-	case recovered := <-done:
-		if recovered != nil {
+		logCtx.Warn().Err(logCtx.Err()).Msg("Starter cancelled")
+	case recovered, exists := <-done:
+		if exists {
 			panic(recovered)
 		}
 	}
 }
 
-func startOne(logCtx *LogCtx, starter Starter, done chan<- any) {
-	if done != nil {
-		defer close(done)
-		defer exception.Recover(func(recovered exception.Exception) { done <- recovered })
-	}
-	// lock
-	mutex.Lock()
-	defer mutex.Unlock()
+func startOne(logCtx *LogCtx, starter Starter, done chan<- exception.Exception) {
+	defer close(done)
+	defer exception.Recover(func(recovered exception.Exception) { done <- recovered })
 	// call starter
 	runner, cleaner := starter(logCtx)
 	// add runner/cleaner if any
