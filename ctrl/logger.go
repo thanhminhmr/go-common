@@ -17,7 +17,7 @@ import (
 )
 
 var logWriter asyncStdoutWriter
-var globalLogger zerolog.Logger // TODO: make this into the global context
+var globalLogger zerolog.Logger
 
 func ifValue[T any](cond bool, a, b T) T {
 	if cond {

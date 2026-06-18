@@ -79,6 +79,10 @@ func Control(initializer Initializer) {
 	logCtx.Info().Msg("Runners finished")
 }
 
+func GlobalCtx() context.Context {
+	return globalCtx
+}
+
 var (
 	globalCtx context.Context
 	shutdown  context.CancelFunc

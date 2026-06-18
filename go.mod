@@ -6,7 +6,7 @@ require (
 	github.com/go-playground/validator/v10 v10.30.3
 	github.com/go-viper/mapstructure/v2 v2.5.0
 	github.com/rs/zerolog v1.35.1
-	github.com/thanhminhmr/go-exception v0.0.15
+	github.com/thanhminhmr/go-exception v0.0.16
 )
 
 require (
