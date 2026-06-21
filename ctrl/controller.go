@@ -172,7 +172,9 @@ func startTimeout(logCtx *LogCtx, starter Starter, timeout time.Duration) {
 	go startOne(logCtx, starter, done)
 	select {
 	case <-logCtx.Done():
-		logCtx.Warn().Err(logCtx.Err()).Msg("Starter cancelled")
+		err := logCtx.Err()
+		logCtx.Error().Err(err).Msg("Starter cancelled")
+		panic(err)
 	case recovered, exists := <-done:
 		if exists {
 			panic(recovered)
