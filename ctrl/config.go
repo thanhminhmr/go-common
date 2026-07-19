@@ -7,6 +7,8 @@
 package ctrl
 
 import (
+	"sync/atomic"
+
 	"github.com/thanhminhmr/go-common/configuration"
 )
 
@@ -17,18 +19,21 @@ type Config struct {
 	LoggerMinimumLevel       LogLevel `env:"LOGGER_MINIMUM_LEVEL" default:"trace" validate:"min=-1,max=7"`
 }
 
-var config Config
+var (
+	status atomic.Uintptr
+	config Config
+)
 
-func init() {
+// reset the status, used explicitly to run tests
+//
+//goland:noinspection GoUnusedFunction
+func reset() { status = atomic.Uintptr{} }
+
+func setup() {
 	// load config
 	if err := configuration.LoadInto(&config); err != nil {
 		panic(err)
 	}
-	// run setup
-	setup()
-}
-
-func setup() {
 	// setup logger
 	setupLogger()
 	// set up the controller

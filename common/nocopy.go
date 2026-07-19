@@ -9,7 +9,7 @@ package common
 import "unsafe"
 
 // Check on compile time that [NoCopy] is indeed zero size.
-var _ = [1]int{unsafe.Sizeof(NoCopy{}): 0}
+func _() { var _ = [1]struct{}{unsafe.Sizeof(NoCopy{}): {}} }
 
 // NoCopy is a zero-sized type that tells the compiler that it should not be
 // copied (by implementing [sync.Locker]).

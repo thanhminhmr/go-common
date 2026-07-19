@@ -23,7 +23,7 @@ type zerologLogger struct {
 	ctx     context.Context
 }
 
-var _ = [1]any{unsafe.Sizeof(zerologLogger{}) - unsafe.Sizeof(zerolog.Logger{}): 0}
+func _() { var _ = [1]struct{}{unsafe.Sizeof(zerologLogger{}) - unsafe.Sizeof(zerolog.Logger{}): {}} }
 
 type zerologLoggerContext interface {
 	zerolog.Logger | zerolog.Context

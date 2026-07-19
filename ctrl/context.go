@@ -39,8 +39,6 @@ type LogCtx struct {
 	logger zerolog.Logger
 }
 
-func (c *LogCtx) ptr() *LogCtx { return c }
-
 func (c *LogCtx) Deadline() (deadline time.Time, ok bool) { return getCtx(&c.logger).Deadline() }
 
 func (c *LogCtx) Done() <-chan struct{} { return getCtx(&c.logger).Done() }

@@ -16,8 +16,8 @@ import (
 	"github.com/thanhminhmr/go-exception"
 )
 
-//go:linkname setup github.com/thanhminhmr/go-common/ctrl.setup
-func setup()
+//go:linkname reset github.com/thanhminhmr/go-common/ctrl.reset
+func reset()
 
 const errorValue = errorString("custom")
 
@@ -129,7 +129,7 @@ func cleanerNotCalledTestFailed(t *testing.T) (ctrl.Cleaner, func()) {
 // ================================================================================
 
 func TestInitializerPanic(t *testing.T) {
-	setup()
+	reset()
 	timeoutTestFailed(t, func() {
 		defer exception.Recover(recoverFailing(t))
 		ctrl.Control(initializerPanic)
@@ -137,7 +137,7 @@ func TestInitializerPanic(t *testing.T) {
 }
 
 func TestStrayRegister(t *testing.T) {
-	setup()
+	reset()
 	timeoutTestFailed(t, func() {
 		defer exception.Recover(recoverLogging(t))
 		ctrl.Register(starterEmpty)
@@ -146,7 +146,7 @@ func TestStrayRegister(t *testing.T) {
 }
 
 func TestRegisterPanic(t *testing.T) {
-	setup()
+	reset()
 	timeoutTestFailed(t, func() {
 		defer exception.Recover(recoverLogging(t))
 		ctrl.Control(func() {
@@ -157,7 +157,7 @@ func TestRegisterPanic(t *testing.T) {
 }
 
 func TestRunnerCleanerPanic(t *testing.T) {
-	setup()
+	reset()
 	starter, deferCheck := starterNotCalledTestFailed(t)
 	defer deferCheck()
 	timeoutTestFailed(t, func() {
@@ -172,7 +172,7 @@ func TestRunnerCleanerPanic(t *testing.T) {
 }
 
 func TestNominal(t *testing.T) {
-	setup()
+	reset()
 	starter, deferCheck := starterNotCalledTestFailed(t)
 	defer deferCheck()
 	timeoutTestFailed(t, func() {
@@ -185,7 +185,7 @@ func TestNominal(t *testing.T) {
 }
 
 func TestShutdown(t *testing.T) {
-	setup()
+	reset()
 	starter, deferCheck := starterNotCalledTestFailed(t)
 	defer deferCheck()
 	timeoutTestFailed(t, func() {

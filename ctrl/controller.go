@@ -10,7 +10,6 @@ import (
 	"context"
 	"slices"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/thanhminhmr/go-exception"
@@ -49,6 +48,8 @@ func Control(initializer Initializer) {
 	if !status.CompareAndSwap(statusIsUninitialized, statusIsInitializing) {
 		panic("BUG: Controller state is unexpected")
 	}
+	// setup logger and controller
+	setup()
 	// defer shutdown cleanly
 	defer func() {
 		shutdown()
@@ -79,17 +80,12 @@ func Control(initializer Initializer) {
 	logCtx.Info().Msg("Runners finished")
 }
 
-func GlobalCtx() context.Context {
-	return globalCtx
-}
-
 var (
 	globalCtx context.Context
 	shutdown  context.CancelFunc
 	cleaners  []Cleaner
 	cleaned   chan struct{}
 	runners   []Runner
-	status    atomic.Uintptr
 	wait      sync.WaitGroup
 	mutex     sync.Mutex
 )
@@ -110,8 +106,6 @@ func setupController(logCleaner Cleaner) {
 	cleaned = make(chan struct{})
 	// clear runners
 	runners = nil
-	// reset status
-	status = atomic.Uintptr{}
 	// reset wait group
 	wait = sync.WaitGroup{}
 	// reset mutex
