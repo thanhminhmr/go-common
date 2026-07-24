@@ -10,14 +10,10 @@ import (
 	"context"
 	"testing"
 	"time"
-	_ "unsafe"
 
 	"github.com/thanhminhmr/go-common/ctrl"
 	"github.com/thanhminhmr/go-exception"
 )
-
-//go:linkname reset github.com/thanhminhmr/go-common/ctrl.reset
-func reset()
 
 const errorValue = errorString("custom")
 
@@ -48,12 +44,10 @@ func runnerShutdown(_ context.Context, shutdown context.CancelFunc) { shutdown()
 func cleanerPanic(_ context.Context) { panic(errorValue) }
 
 func runnerTimeout(t *testing.T) ctrl.Runner {
-	return func(ctx context.Context, shutdown context.CancelFunc) {
-		timer := time.After(time.Minute)
+	return func(ctx context.Context, _ context.CancelFunc) {
 		select {
-		case <-timer:
-			t.Log("timed out")
-			t.FailNow()
+		case <-time.After(10 * time.Second):
+			t.Error("runner timed out waiting for shutdown")
 		case <-ctx.Done():
 		}
 	}
@@ -74,16 +68,15 @@ func recoverLogging(t *testing.T) func(exception.Exception) {
 }
 
 func timeoutTestFailed(t *testing.T, fn func()) {
+	t.Helper()
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
 		fn()
 	}()
-	timer := time.After(time.Minute)
 	select {
-	case <-timer:
-		t.Log("timed out")
-		t.FailNow()
+	case <-time.After(10 * time.Second):
+		t.Fatal("test timed out")
 	case <-done:
 	}
 }
@@ -129,7 +122,7 @@ func cleanerNotCalledTestFailed(t *testing.T) (ctrl.Cleaner, func()) {
 // ================================================================================
 
 func TestInitializerPanic(t *testing.T) {
-	reset()
+	ctrl.ResetForTest()
 	timeoutTestFailed(t, func() {
 		defer exception.Recover(recoverFailing(t))
 		ctrl.Control(initializerPanic)
@@ -137,7 +130,7 @@ func TestInitializerPanic(t *testing.T) {
 }
 
 func TestStrayRegister(t *testing.T) {
-	reset()
+	ctrl.ResetForTest()
 	timeoutTestFailed(t, func() {
 		defer exception.Recover(recoverLogging(t))
 		ctrl.Register(starterEmpty)
@@ -146,7 +139,7 @@ func TestStrayRegister(t *testing.T) {
 }
 
 func TestRegisterPanic(t *testing.T) {
-	reset()
+	ctrl.ResetForTest()
 	timeoutTestFailed(t, func() {
 		defer exception.Recover(recoverLogging(t))
 		ctrl.Control(func() {
@@ -157,7 +150,7 @@ func TestRegisterPanic(t *testing.T) {
 }
 
 func TestRunnerCleanerPanic(t *testing.T) {
-	reset()
+	ctrl.ResetForTest()
 	starter, deferCheck := starterNotCalledTestFailed(t)
 	defer deferCheck()
 	timeoutTestFailed(t, func() {
@@ -172,7 +165,7 @@ func TestRunnerCleanerPanic(t *testing.T) {
 }
 
 func TestNominal(t *testing.T) {
-	reset()
+	ctrl.ResetForTest()
 	starter, deferCheck := starterNotCalledTestFailed(t)
 	defer deferCheck()
 	timeoutTestFailed(t, func() {
@@ -185,7 +178,7 @@ func TestNominal(t *testing.T) {
 }
 
 func TestShutdown(t *testing.T) {
-	reset()
+	ctrl.ResetForTest()
 	starter, deferCheck := starterNotCalledTestFailed(t)
 	defer deferCheck()
 	timeoutTestFailed(t, func() {
