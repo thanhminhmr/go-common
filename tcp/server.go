@@ -20,20 +20,28 @@ import (
 	"github.com/thanhminhmr/go-exception"
 )
 
+// ConnectionHandler handles a single accepted TCP connection.
 type ConnectionHandler[Connection net.Conn] = func(ctx context.Context, conn Connection) error
 
+// ServerConfig configures a TCP server created by [NewServer].
 type ServerConfig struct {
-	Port                  uint16 `cfg:"tcpServerPort" default:"32768" validate:"required"`
-	ShutdownOnError       bool   `cfg:"tcpServerShutdownOnError" default:"true"`
-	TracePerConnection    bool   `cfg:"tcpServerTracePerConnection"`
-	ConcurrentConnections uint32 `cfg:"tcpServerConcurrentConnections" validate:"min=256,max=65536" default:"1024"`
+	Port                  uint16 `cfg:"port" default:"32768" validate:"required"`
+	ShutdownOnError       bool   `cfg:"shutdown_on_error" default:"true"`
+	TracePerConnection    bool   `cfg:"trace_per_connection"`
+	ConcurrentConnections uint32 `cfg:"concurrent_connections" validate:"min=256,max=65536" default:"1024"`
 }
 
+// NewServer returns a [ctrl.Starter] that, when started, listens for TCP
+// connections on config.Port and dispatches each accepted connection to
+// handler. The returned Runner accepts connections concurrently up to
+// config.ConcurrentConnections; the returned Cleaner closes the listener and
+// waits for in-flight handlers to finish. It panics if the listener cannot be
+// created.
 func NewServer(
 	config *ServerConfig,
 	handler ConnectionHandler[*net.TCPConn],
 ) ctrl.Starter {
-	return func(ctx context.Context) (ctrl.Runner, ctrl.Cleaner) {
+	return func(ctx, _ context.Context) (ctrl.Runner, ctrl.Cleaner) {
 		logger := zerolog.Ctx(ctx).With().Uint16("port", config.Port).Logger()
 		// create listener
 		listener, err := net.ListenTCP("tcp", &net.TCPAddr{Port: int(config.Port)})
@@ -59,8 +67,8 @@ type tcpServer struct {
 }
 
 func (s *tcpServer) run(ctx context.Context, shutdown context.CancelFunc) {
-	ctx = zerolog.Ctx(ctx).With().Uint16("port", s.config.Port).Logger().WithContext(ctx)
-	logger := zerolog.Ctx(ctx)
+	logger := zerolog.Ctx(ctx).With().Uint16("port", s.config.Port).Logger()
+	ctx = logger.WithContext(ctx)
 	// create semaphore as a concurrent connection limiter
 	semaphore := make(chan struct{}, s.config.ConcurrentConnections)
 	for {
@@ -91,8 +99,8 @@ func (s *tcpServer) run(ctx context.Context, shutdown context.CancelFunc) {
 }
 
 func (s *tcpServer) execute(ctx context.Context, connection *net.TCPConn) {
-	ctx = zerolog.Ctx(ctx).With().Str("connection_id", rand.Text()).Logger().WithContext(ctx)
-	logger := zerolog.Ctx(ctx)
+	logger := zerolog.Ctx(ctx).With().Str("connection_id", rand.Text()).Logger()
+	ctx = logger.WithContext(ctx)
 	if s.config.TracePerConnection {
 		traceLogger := logger.With().
 			Stringer("remote_address", connection.RemoteAddr()).

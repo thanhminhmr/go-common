@@ -25,15 +25,15 @@ func (e errorString) Error() string {
 
 func initializerPanic() { panic(errorValue) }
 
-func starterPanic(_ context.Context) (ctrl.Runner, ctrl.Cleaner) { panic(errorValue) }
+func starterPanic(_, _ context.Context) (ctrl.Runner, ctrl.Cleaner) { panic(errorValue) }
 
-func starterEmpty(_ context.Context) (ctrl.Runner, ctrl.Cleaner) { return nil, nil }
+func starterEmpty(_, _ context.Context) (ctrl.Runner, ctrl.Cleaner) { return nil, nil }
 
-func starterRunnerCleanerPanic(_ context.Context) (ctrl.Runner, ctrl.Cleaner) {
+func starterRunnerCleanerPanic(_, _ context.Context) (ctrl.Runner, ctrl.Cleaner) {
 	return runnerPanic, cleanerPanic
 }
 
-func starterRunnerShutdown(_ context.Context) (ctrl.Runner, ctrl.Cleaner) {
+func starterRunnerShutdown(_, _ context.Context) (ctrl.Runner, ctrl.Cleaner) {
 	return runnerShutdown, nil
 }
 
@@ -54,7 +54,7 @@ func runnerTimeout(t *testing.T) ctrl.Runner {
 }
 
 func starterRunnerTimeout(t *testing.T) ctrl.Starter {
-	return func(ctx context.Context) (ctrl.Runner, ctrl.Cleaner) {
+	return func(_, _ context.Context) (ctrl.Runner, ctrl.Cleaner) {
 		return runnerTimeout(t), nil
 	}
 }
@@ -85,7 +85,7 @@ func starterNotCalledTestFailed(t *testing.T) (ctrl.Starter, func()) {
 	runner, runnerCheck := runnerNotCalledTestFailed(t)
 	cleaner, cleanerCheck := cleanerNotCalledTestFailed(t)
 	called := false
-	return func(_ context.Context) (ctrl.Runner, ctrl.Cleaner) {
+	return func(_, _ context.Context) (ctrl.Runner, ctrl.Cleaner) {
 			called = true
 			return runner, cleaner
 		}, func() {
@@ -187,6 +187,30 @@ func TestShutdown(t *testing.T) {
 			defer exception.Recover(recoverFailing(t))
 			ctrl.Register(starterRunnerTimeout(t))
 			ctrl.Register(starterRunnerShutdown)
+			ctrl.Register(starter)
+		})
+	})
+}
+
+func TestStarterGlobalCtx(t *testing.T) {
+	ctrl.ResetForTest()
+	starter := func(_, globalCtx context.Context) (ctrl.Runner, ctrl.Cleaner) {
+		return func(ctx context.Context, shutdown context.CancelFunc) {
+			if ctx != globalCtx {
+				t.Errorf("runner ctx is not the starter's globalCtx")
+			}
+			shutdown()
+			select {
+			case <-globalCtx.Done():
+			case <-time.After(10 * time.Second):
+				t.Error("globalCtx was not canceled by shutdown")
+			}
+		}, nil
+	}
+	timeoutTestFailed(t, func() {
+		defer exception.Recover(recoverFailing(t))
+		ctrl.Control(func() {
+			defer exception.Recover(recoverFailing(t))
 			ctrl.Register(starter)
 		})
 	})

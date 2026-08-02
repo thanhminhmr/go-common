@@ -35,11 +35,18 @@ type Config struct {
 // registered before the panic will be clean up gracefully.
 type Initializer = func()
 
-// Starter starts the service, usually with a timeout.
-type Starter = func(ctx context.Context) (Runner, Cleaner)
+// Starter starts the service, usually with a timeout. The ctx parameter is the
+// starter's deadline context, bounded by [Config.StarterTimeout] (or the
+// timeout passed to [RegisterWithTimeout]); the starter must return before ctx
+// is canceled or the controller panics. The globalCtx parameter is the
+// controller's global context, shared across all services and canceled when
+// [Control] shuts down. A Starter that spawns long-lived work should bind
+// globalCtx into its [Runner] and [Cleaner] so they observe shutdown. It
+// returns a [Runner] and a [Cleaner]; either may be nil if not needed.
+type Starter = func(ctx, globalCtx context.Context) (Runner, Cleaner)
 
 // Runner runs a service. It is returned by a [Starter] and launched as a
-// goroutine by [Control]. The runner should run until ctx is cancelled (the
+// goroutine by [Control]. The runner should run until ctx is canceled (the
 // controller calls shutdown to cancel it) or until it calls shutdown itself to
 // initiate a graceful shutdown. If a Runner panics, the controller recovers it,
 // logs the error, and initiates shutdown.
@@ -218,7 +225,7 @@ func startOne(ctx context.Context, starter Starter, done chan<- exception.Except
 	defer close(done)
 	defer exception.Recover(func(recovered exception.Exception) { done <- recovered })
 	// call starter
-	runner, cleaner := starter(ctx)
+	runner, cleaner := starter(ctx, controller.globalCtx)
 	// add runner/cleaner if any
 	if runner != nil {
 		controller.runners = append(controller.runners, runner)

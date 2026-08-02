@@ -18,7 +18,7 @@ import (
 // ShutdownOnSignal is a [Starter] that returns a [Runner] listening for
 // SIGINT/SIGTERM. On receipt of either signal the runner calls shutdown to
 // initiate a graceful controller shutdown. It returns a nil [Cleaner].
-func ShutdownOnSignal(_ context.Context) (Runner, Cleaner) {
+func ShutdownOnSignal(_, _ context.Context) (Runner, Cleaner) {
 	return func(ctx context.Context, shutdown context.CancelFunc) {
 		// register exit signal
 		signals := make(chan os.Signal, 1)
