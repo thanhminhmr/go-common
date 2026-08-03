@@ -255,7 +255,7 @@ func TestApplyDefaults_NonPointerError(t *testing.T) {
 	type S struct {
 		X int `default:"1"`
 	}
-	require.Panics(t, func() { common.ApplyDefaults(S{}) })
+	require.Error(t, common.ApplyDefaults(S{}))
 }
 
 func TestApplyDefaults_NilPointerError(t *testing.T) {
@@ -263,7 +263,7 @@ func TestApplyDefaults_NilPointerError(t *testing.T) {
 		X int `default:"1"`
 	}
 	var s *S
-	require.Panics(t, func() { common.ApplyDefaults(s) })
+	require.Error(t, common.ApplyDefaults(s))
 }
 
 func TestApplyDefaults_DoublePointerRoot_Error(t *testing.T) {
@@ -271,7 +271,7 @@ func TestApplyDefaults_DoublePointerRoot_Error(t *testing.T) {
 		X int `default:"42"`
 	}
 	var inner *S
-	require.Panics(t, func() { common.ApplyDefaults(&inner) })
+	require.Error(t, common.ApplyDefaults(&inner))
 }
 
 // =========================================================================
@@ -329,7 +329,7 @@ func TestApplyDefaults_CacheReuse(t *testing.T) {
 
 func TestApplyDefaults_PointerToNonStruct_Error(t *testing.T) {
 	x := 42
-	require.Panics(t, func() { common.ApplyDefaults(&x) })
+	require.Error(t, common.ApplyDefaults(&x))
 }
 
 // =========================================================================
@@ -434,7 +434,7 @@ func TestApplyDefaults_EmbeddedPointerNoDefaults(t *testing.T) {
 // =========================================================================
 
 func TestApplyDefaults_NilInput(t *testing.T) {
-	require.Panics(t, func() { common.ApplyDefaults(nil) })
+	require.Error(t, common.ApplyDefaults(nil))
 }
 
 // =========================================================================

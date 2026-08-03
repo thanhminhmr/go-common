@@ -7,7 +7,6 @@
 package common
 
 import (
-	"fmt"
 	"reflect"
 	"sync"
 
@@ -32,7 +31,7 @@ func ApplyDefaults(value any) error {
 			return applyPlan(reflectValue, getDefaultsPlan(reflectValue.Type()), 0)
 		}
 	}
-	panic(fmt.Sprintf("ApplyDefaults: v must be a pointer to struct, got %T", value))
+	return exception.String("ApplyDefaults: Unsupported value type")
 }
 
 type defaultPlan struct {
@@ -97,8 +96,8 @@ func applyPlan(v reflect.Value, plan *defaultPlan, depth uint) error {
 				return err
 			}
 		} else if err := BindSimpleFromString(node.value, fieldValue.Addr().Interface()); err != nil {
-			return exception.Template("ApplyDefaults: Invalid default for %T.%s: %w").
-				Format(v.Interface(), v.Type().Field(node.index).Name, err)
+			return exception.Template("ApplyDefaults: Invalid default for %T.%s").
+				Format(v.Interface(), v.Type().Field(node.index).Name).AddCause(err)
 		}
 	}
 	return nil

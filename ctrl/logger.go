@@ -14,14 +14,14 @@ import (
 	"github.com/thanhminhmr/go-common/cfg"
 )
 
-// loggerConfig configures the zerolog global logger setup.
-type loggerConfig struct {
+// LoggerConfig configures the zerolog global logger setup.
+type LoggerConfig struct {
 	UnixTimestamp bool          `cfg:"unix_timestamp"`
 	MinimumLevel  zerolog.Level `cfg:"minimum_level" default:"trace" validate:"min=-1,max=7"`
 }
 
 func init() {
-	config, err := cfg.Load[loggerConfig]("logger")
+	config, err := cfg.Load[LoggerConfig]("logger")
 	if err != nil {
 		panic(err)
 	}
