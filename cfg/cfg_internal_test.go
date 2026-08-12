@@ -7,9 +7,12 @@
 package cfg
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // SetGlobalForTest replaces the global config for testing and returns a
@@ -170,5 +173,46 @@ func TestCollectAndMerge(t *testing.T) {
 		m := collectAndMerge(r, "db", []string{"prod"})
 		assert.Equal(t, 1, m["a"])
 		assert.Equal(t, 2, m["b"])
+	})
+
+	t.Run("name only in prefixed level initializes merged", func(t *testing.T) {
+		// top-level "db" is missing so merged stays nil until the prefix
+		// level provides the value (the "if merged == nil" branch).
+		r := map[string]any{
+			"prod": map[string]any{"db": map[string]any{"x": 1}},
+		}
+		m := collectAndMerge(r, "db", []string{"prod"})
+		assert.Equal(t, map[string]any{"x": 1}, m)
+	})
+}
+
+// =========================================================================
+// loadGlobalConfig
+// =========================================================================
+
+func TestLoadGlobalConfigFromEnv(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	require.NoError(t, os.WriteFile(path, []byte(`{"app":{"name":"hi"}}`), 0o644))
+	t.Setenv("CFG_FILE", path)
+
+	config := loadGlobalConfig()
+	app, ok := config["app"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "hi", app["name"])
+}
+
+func TestLoadGlobalConfigExplicitMissingFilePanics(t *testing.T) {
+	t.Setenv("CFG_FILE", filepath.Join(t.TempDir(), "nope.json"))
+	assert.Panics(t, func() {
+		loadGlobalConfig()
+	})
+}
+
+func TestLoadGlobalConfigMalformedJSONPanics(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	require.NoError(t, os.WriteFile(path, []byte(`{invalid`), 0o644))
+	t.Setenv("CFG_FILE", path)
+	assert.Panics(t, func() {
+		loadGlobalConfig()
 	})
 }

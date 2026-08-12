@@ -266,10 +266,10 @@ func TestServer_Run_StopsOnContextCancel(t *testing.T) {
 
 	// Fill the semaphore so the next select blocks on ctx.Done().
 	var conns []net.Conn
-	for i := 0; i < 256; i++ {
+	for range 256 {
 		conns = append(conns, dial(t, port))
 	}
-	for i := 0; i < 256; i++ {
+	for range 256 {
 		waitRecv(t, started, "handler not started")
 	}
 

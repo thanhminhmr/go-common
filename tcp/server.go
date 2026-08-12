@@ -32,15 +32,12 @@ type ServerConfig struct {
 }
 
 // NewServer returns a [ctrl.Starter] that, when started, listens for TCP
-// connections on config.Port and dispatches each accepted connection to
-// handler. The returned Runner accepts connections concurrently up to
+// connections on config.Port and dispatches each accepted connection to handler.
+// The returned Runner accepts connections concurrently up to
 // config.ConcurrentConnections; the returned Cleaner closes the listener and
 // waits for in-flight handlers to finish. It panics if the listener cannot be
 // created.
-func NewServer(
-	config *ServerConfig,
-	handler ConnectionHandler[*net.TCPConn],
-) ctrl.Starter {
+func NewServer(config *ServerConfig, handler ConnectionHandler[*net.TCPConn]) ctrl.Starter {
 	return func(ctx, _ context.Context) (ctrl.Runner, ctrl.Cleaner) {
 		logger := zerolog.Ctx(ctx).With().Uint16("port", config.Port).Logger()
 		// create listener

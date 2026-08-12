@@ -33,7 +33,7 @@ type Config struct {
 // Initializer initializes the controller state machine by calling [Register] as
 // needed, and panic if any error occurred in the process. Anything that had been
 // registered before the panic will be clean up gracefully.
-type Initializer = func()
+type Initializer = func(logger *zerolog.Logger)
 
 // Starter starts the service, usually with a timeout. The ctx parameter is the
 // starter's deadline context, bounded by [Config.StarterTimeout] (or the
@@ -110,13 +110,13 @@ func Control(initializer Initializer) {
 		<-controller.cleaned
 	}()
 	// register a recover
+	logger := zerolog.Ctx(controller.globalCtx)
 	defer exception.Recover(func(recovered exception.Exception) {
-		zerolog.Ctx(controller.globalCtx).Error().AnErr("recovered", recovered).Msg("Initializer panicked")
+		logger.Error().AnErr("recovered", recovered).Msg("Initializer panicked")
 	})
 	// run initializer
-	logger := zerolog.Ctx(controller.globalCtx)
 	logger.Info().Msg("Initializing...")
-	initializer()
+	initializer(logger)
 	logger.Info().Msg("Initialized, starting runners...")
 	// set the state to running
 	if !controller.status.CompareAndSwap(statusIsInitializing, statusIsRunning) {
@@ -176,13 +176,12 @@ func cleanTimeout(ctx context.Context, cleaner Cleaner, timeout time.Duration) {
 		ctx, cancel = context.WithTimeout(ctx, timeout)
 		defer cancel()
 	}
-	logger := zerolog.Ctx(ctx)
 	// run and wait
 	done := make(chan struct{})
 	go cleanOne(ctx, cleaner, done)
 	select {
 	case <-ctx.Done():
-		logger.Warn().Err(ctx.Err()).Msg("Cleaner cancelled")
+		zerolog.Ctx(ctx).Warn().Err(ctx.Err()).Msg("Cleaner cancelled")
 	case <-done:
 	}
 }
@@ -190,7 +189,7 @@ func cleanTimeout(ctx context.Context, cleaner Cleaner, timeout time.Duration) {
 func cleanOne(ctx context.Context, cleaner Cleaner, done chan<- struct{}) {
 	defer close(done)
 	defer exception.Recover(func(recovered exception.Exception) {
-		zerolog.Ctx(controller.globalCtx).Error().AnErr("recovered", recovered).Msg("Cleaner panicked")
+		zerolog.Ctx(ctx).Error().AnErr("recovered", recovered).Msg("Cleaner panicked")
 	})
 	cleaner(ctx)
 }
@@ -205,14 +204,13 @@ func startTimeout(ctx context.Context, starter Starter, timeout time.Duration) {
 		ctx, cancel = context.WithTimeout(ctx, timeout)
 		defer cancel()
 	}
-	logger := zerolog.Ctx(ctx)
 	// run and wait
 	done := make(chan exception.Exception)
 	go startOne(ctx, starter, done)
 	select {
 	case <-ctx.Done():
 		err := ctx.Err()
-		logger.Error().Err(err).Msg("Starter cancelled")
+		zerolog.Ctx(ctx).Error().Err(err).Msg("Starter cancelled")
 		panic(err)
 	case recovered, exists := <-done:
 		if exists {

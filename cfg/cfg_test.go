@@ -464,3 +464,27 @@ func TestStringFromJSONNumber(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "8080", a.Port)
 }
+
+// =========================================================================
+// LoadInto error propagation
+// =========================================================================
+
+func TestLoadIntoApplyDefaultsError(t *testing.T) {
+	setGlobalJSON(t, `{"app":{}}`)
+	type App struct {
+		Port int `cfg:"port" default:"not-a-number"`
+	}
+	var a App
+	err := cfg.LoadInto(&a, "app")
+	assert.Error(t, err)
+}
+
+func TestLoadIntoBindError(t *testing.T) {
+	setGlobalJSON(t, `{"app":{"port":"not-a-number"}}`)
+	type App struct {
+		Port int `cfg:"port"`
+	}
+	var a App
+	err := cfg.LoadInto(&a, "app")
+	assert.Error(t, err)
+}
