@@ -88,11 +88,11 @@ func TestBindSimpleFromString(t *testing.T) {
 			in   string
 			want any
 		}{
-			{"int", reflect.TypeOf(0), "42", 42},
-			{"int8", reflect.TypeOf(int8(0)), "-12", int8(-12)},
-			{"int16", reflect.TypeOf(int16(0)), "1000", int16(1000)},
-			{"int32", reflect.TypeOf(int32(0)), "-100000", int32(-100000)},
-			{"int64", reflect.TypeOf(int64(0)), "9000000000", int64(9000000000)},
+			{"int", reflect.TypeFor[int](), "42", 42},
+			{"int8", reflect.TypeFor[int8](), "-12", int8(-12)},
+			{"int16", reflect.TypeFor[int16](), "1000", int16(1000)},
+			{"int32", reflect.TypeFor[int32](), "-100000", int32(-100000)},
+			{"int64", reflect.TypeFor[int64](), "9000000000", int64(9000000000)},
 		}
 		for _, c := range cases {
 			t.Run(c.name, func(t *testing.T) {
@@ -120,11 +120,11 @@ func TestBindSimpleFromString(t *testing.T) {
 			in   string
 			want any
 		}{
-			{"uint", reflect.TypeOf(uint(0)), "42", uint(42)},
-			{"uint8", reflect.TypeOf(uint8(0)), "255", uint8(255)},
-			{"uint16", reflect.TypeOf(uint16(0)), "60000", uint16(60000)},
-			{"uint32", reflect.TypeOf(uint32(0)), "4000000000", uint32(4000000000)},
-			{"uint64", reflect.TypeOf(uint64(0)), "9000000000", uint64(9000000000)},
+			{"uint", reflect.TypeFor[uint](), "42", uint(42)},
+			{"uint8", reflect.TypeFor[uint8](), "255", uint8(255)},
+			{"uint16", reflect.TypeFor[uint16](), "60000", uint16(60000)},
+			{"uint32", reflect.TypeFor[uint32](), "4000000000", uint32(4000000000)},
+			{"uint64", reflect.TypeFor[uint64](), "9000000000", uint64(9000000000)},
 		}
 		for _, c := range cases {
 			t.Run(c.name, func(t *testing.T) {
@@ -147,8 +147,8 @@ func TestBindSimpleFromString(t *testing.T) {
 			in   string
 			want any
 		}{
-			{"float32", reflect.TypeOf(float32(0)), "3.14", float32(3.14)},
-			{"float64", reflect.TypeOf(float64(0)), "2.71828", 2.71828},
+			{"float32", reflect.TypeFor[float32](), "3.14", float32(3.14)},
+			{"float64", reflect.TypeFor[float64](), "2.71828", 2.71828},
 		}
 		for _, c := range cases {
 			t.Run(c.name, func(t *testing.T) {
@@ -189,8 +189,8 @@ func TestBindSimpleFromString(t *testing.T) {
 			typ  reflect.Type
 			want any
 		}{
-			{"complex64", reflect.TypeOf(complex64(0)), complex64(1 + 2i)},
-			{"complex128", reflect.TypeOf(complex128(0)), 1 + 2i},
+			{"complex64", reflect.TypeFor[complex64](), complex64(1 + 2i)},
+			{"complex128", reflect.TypeFor[complex128](), 1 + 2i},
 		}
 		for _, c := range cases {
 			t.Run(c.name, func(t *testing.T) {

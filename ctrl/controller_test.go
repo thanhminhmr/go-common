@@ -14,7 +14,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/thanhminhmr/go-common/ctrl"
@@ -67,7 +66,7 @@ func TestControl_NilInitializer_Panics(t *testing.T) {
 func TestControl_SecondCall_Panics(t *testing.T) {
 	ctrl.ResetForTest()
 	runWithTimeout(t, func() {
-		ctrl.Control(func(_ *zerolog.Logger) {
+		ctrl.Control(func(_ context.Context) {
 			ctrl.Register(func(_, _ context.Context) (ctrl.Runner, ctrl.Cleaner) {
 				return shutdownRunner(), nil
 			})
@@ -75,7 +74,7 @@ func TestControl_SecondCall_Panics(t *testing.T) {
 	})
 	// After Control returns, status is terminating (set by cleanAll), so the
 	// CAS uninitialized→initializing fails and Control panics.
-	assert.Panics(t, func() { ctrl.Control(func(_ *zerolog.Logger) {}) })
+	assert.Panics(t, func() { ctrl.Control(func(_ context.Context) {}) })
 }
 
 // ================================================================================
@@ -85,14 +84,14 @@ func TestControl_SecondCall_Panics(t *testing.T) {
 func TestControl_InitializerPanic_Recovered(t *testing.T) {
 	ctrl.ResetForTest()
 	runWithTimeout(t, func() {
-		ctrl.Control(func(_ *zerolog.Logger) { panic(panicSentinel) })
+		ctrl.Control(func(_ context.Context) { panic(panicSentinel) })
 	})
 }
 
 func TestControl_StarterPanic_Recovered(t *testing.T) {
 	ctrl.ResetForTest()
 	runWithTimeout(t, func() {
-		ctrl.Control(func(_ *zerolog.Logger) {
+		ctrl.Control(func(_ context.Context) {
 			ctrl.Register(func(_, _ context.Context) (ctrl.Runner, ctrl.Cleaner) {
 				panic(panicSentinel)
 			})
@@ -105,7 +104,7 @@ func TestControl_StarterTimeout_Recovered(t *testing.T) {
 	release := make(chan struct{})
 	starterReturned := make(chan struct{})
 	runWithTimeout(t, func() {
-		ctrl.Control(func(_ *zerolog.Logger) {
+		ctrl.Control(func(_ context.Context) {
 			ctrl.RegisterWithTimeout(func(ctx, _ context.Context) (ctrl.Runner, ctrl.Cleaner) {
 				<-ctx.Done()
 				<-release // keep the starter goroutine alive past the panic
@@ -129,7 +128,7 @@ func TestControl_RunnerCleanerPanic_Recovered(t *testing.T) {
 	ctrl.ResetForTest()
 	var starterCalled, runnerCalled, cleanerCalled atomic.Bool
 	runWithTimeout(t, func() {
-		ctrl.Control(func(_ *zerolog.Logger) {
+		ctrl.Control(func(_ context.Context) {
 			ctrl.Register(func(_, _ context.Context) (ctrl.Runner, ctrl.Cleaner) {
 				return func(_ context.Context, _ context.CancelFunc) { panic(panicSentinel) },
 					func(_ context.Context) { panic(panicSentinel) }
@@ -156,7 +155,7 @@ func TestControl_Nominal(t *testing.T) {
 	ctrl.ResetForTest()
 	var starterCalled, runnerCalled, cleanerCalled atomic.Bool
 	runWithTimeout(t, func() {
-		ctrl.Control(func(_ *zerolog.Logger) {
+		ctrl.Control(func(_ context.Context) {
 			ctrl.Register(func(_, _ context.Context) (ctrl.Runner, ctrl.Cleaner) {
 				starterCalled.Store(true)
 				return func(ctx context.Context, shutdown context.CancelFunc) {
@@ -176,7 +175,7 @@ func TestControl_Shutdown_StopsRunners(t *testing.T) {
 	ctrl.ResetForTest()
 	var blockingDone atomic.Bool
 	runWithTimeout(t, func() {
-		ctrl.Control(func(_ *zerolog.Logger) {
+		ctrl.Control(func(_ context.Context) {
 			ctrl.Register(func(_, _ context.Context) (ctrl.Runner, ctrl.Cleaner) {
 				return shutdownRunner(), nil
 			})
@@ -194,7 +193,7 @@ func TestControl_Shutdown_StopsRunners(t *testing.T) {
 func TestControl_RunnerReceivesGlobalCtx(t *testing.T) {
 	ctrl.ResetForTest()
 	runWithTimeout(t, func() {
-		ctrl.Control(func(_ *zerolog.Logger) {
+		ctrl.Control(func(_ context.Context) {
 			ctrl.Register(func(_, globalCtx context.Context) (ctrl.Runner, ctrl.Cleaner) {
 				return func(ctx context.Context, shutdown context.CancelFunc) {
 					assert.Equal(t, globalCtx, ctx, "runner ctx is not the globalCtx")
@@ -211,7 +210,7 @@ func TestControl_CleanersRunInReverseOrder(t *testing.T) {
 	var mu sync.Mutex
 	order := make([]int, 0, 3)
 	runWithTimeout(t, func() {
-		ctrl.Control(func(_ *zerolog.Logger) {
+		ctrl.Control(func(_ context.Context) {
 			for i := range 3 {
 				ctrl.Register(func(_, _ context.Context) (ctrl.Runner, ctrl.Cleaner) {
 					return shutdownRunner(), func(_ context.Context) {
@@ -246,7 +245,7 @@ func TestRegisterWithTimeout_Zero_NoDeadline(t *testing.T) {
 	ctrl.ResetForTest()
 	var starterCalled atomic.Bool
 	runWithTimeout(t, func() {
-		ctrl.Control(func(_ *zerolog.Logger) {
+		ctrl.Control(func(_ context.Context) {
 			ctrl.RegisterWithTimeout(func(_, _ context.Context) (ctrl.Runner, ctrl.Cleaner) {
 				starterCalled.Store(true)
 				return shutdownRunner(), nil

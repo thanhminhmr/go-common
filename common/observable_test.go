@@ -70,7 +70,7 @@ func TestObservableMultipleObserversSameEvent(t *testing.T) {
 	const n = 5
 	var wg sync.WaitGroup
 	wg.Add(n)
-	for i := 0; i < n; i++ {
+	for range n {
 		o.On("e", func(event string, args ...any) { wg.Done() })
 	}
 	o.Trigger("e")
@@ -178,7 +178,7 @@ func TestObservableMultipleTriggers(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(n)
 	o.On("e", func(event string, args ...any) { wg.Done() })
-	for i := 0; i < n; i++ {
+	for range n {
 		o.Trigger("e")
 	}
 	done := make(chan struct{})
@@ -215,11 +215,8 @@ func TestObservableConcurrent(t *testing.T) {
 	const n = 100
 	var wg sync.WaitGroup
 	var count atomic.Int64
-	for i := 0; i < n; i++ {
-		wg.Add(1)
-		i := i
-		go func() {
-			defer wg.Done()
+	for i := range n {
+		wg.Go(func() {
 			ev := fmt.Sprintf("e%d", i)
 			done := make(chan struct{})
 			cancel := o.On(ev, func(event string, args ...any) {
@@ -233,7 +230,7 @@ func TestObservableConcurrent(t *testing.T) {
 				t.Errorf("observer %d not called", i)
 			}
 			cancel()
-		}()
+		})
 	}
 	wg.Wait()
 	if c := count.Load(); c != n {
@@ -249,14 +246,12 @@ func TestObservableCancelConcurrentWithTrigger(t *testing.T) {
 	var o common.Observable
 	const n = 200
 	var wg sync.WaitGroup
-	for i := 0; i < n; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range n {
+		wg.Go(func() {
 			cancel := o.On("e", func(event string, args ...any) {})
 			o.Trigger("e")
 			cancel()
-		}()
+		})
 	}
 	wg.Wait()
 }

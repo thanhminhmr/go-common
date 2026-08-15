@@ -33,7 +33,7 @@ type Config struct {
 // Initializer initializes the controller state machine by calling [Register] as
 // needed, and panic if any error occurred in the process. Anything that had been
 // registered before the panic will be clean up gracefully.
-type Initializer = func(logger *zerolog.Logger)
+type Initializer = func(globalCtx context.Context)
 
 // Starter starts the service, usually with a timeout. The ctx parameter is the
 // starter's deadline context, bounded by [Config.StarterTimeout] (or the
@@ -116,7 +116,7 @@ func Control(initializer Initializer) {
 	})
 	// run initializer
 	logger.Info().Msg("Initializing...")
-	initializer(logger)
+	initializer(controller.globalCtx)
 	logger.Info().Msg("Initialized, starting runners...")
 	// set the state to running
 	if !controller.status.CompareAndSwap(statusIsInitializing, statusIsRunning) {
