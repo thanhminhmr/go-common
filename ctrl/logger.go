@@ -15,7 +15,7 @@ import (
 )
 
 // LoggerConfig configures the zerolog global logger setup.
-type LoggerConfig struct {
+type LoggerConfig = struct {
 	UnixTimestamp bool          `cfg:"unix_timestamp"`
 	MinimumLevel  zerolog.Level `cfg:"minimum_level" default:"trace" validate:"min=-1,max=7"`
 }

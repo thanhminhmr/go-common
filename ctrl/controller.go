@@ -19,13 +19,14 @@ import (
 	"github.com/thanhminhmr/go-exception"
 )
 
-// Config configures the controller state machine. It is loaded from the
-// "controller" section of the config file via [cfg.LoadInto] during [Control].
+// ControllerConfig configures the controller state machine. It is loaded from
+// the "controller" section of the config file via [cfg.LoadInto] during
+// [Control].
 //
 //   - StarterTimeout bounds each [Starter] call. Zero disables the deadline.
 //   - CleanerTimeout bounds each [Cleaner] call during shutdown. Zero disables the
 //     deadline.
-type Config struct {
+type ControllerConfig = struct {
 	StarterTimeout uint `cfg:"starter_timeout" default:"30"`
 	CleanerTimeout uint `cfg:"cleaner_timeout" default:"30"`
 }
@@ -135,7 +136,7 @@ func Control(initializer Initializer) {
 }
 
 type controllerState = struct {
-	config    Config
+	config    ControllerConfig
 	status    atomic.Uintptr
 	globalCtx context.Context
 	shutdown  context.CancelFunc
